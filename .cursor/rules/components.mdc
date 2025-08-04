@@ -1,0 +1,11 @@
+---
+description: >
+  Project coding guidelines enforcing consistent file naming and restricting
+  third-party tools. ShadCN and Tailwind CSS are allowed strictly for component styling.
+globs: 
+alwaysApply: true
+---
+- Always use camelCase for new component file names.
+- Do not use additional third-party tools unless explicitly approved.
+- Use ShadCN and Tailwind CSS **only** for building and styling UI components.
+  Do not use them for global layouts, utilities, or logic outside components.

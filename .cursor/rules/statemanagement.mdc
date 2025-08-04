@@ -1,0 +1,12 @@
+---
+description: >
+  State management guidelines enforcing the use of Zustand, modern React hooks,
+  and URL state patterns. Encourages minimal and intentional client-side state.
+globs: 
+alwaysApply: true
+---
+- Use the `zustand` library for all state management. Avoid other state libraries like Redux, Recoil, or Jotai.
+- Prefer `useActionState` over the deprecated `useFormState` for handling form actions.
+- Leverage the enhanced `useFormStatus` hook to access `data`, `method`, and `action` in form logic.
+- Use the `nuqs` library for synchronizing URL state (e.g., filters, tabs, pagination).
+- Minimize client-side state. Keep state colocated with components and promote server-derived state when possible.
