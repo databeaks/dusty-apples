@@ -45,11 +45,21 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 const TourStepNode = ({ data, id }: { data: any; id: string }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(data);
-  const { setNodes } = useReactFlow();
+  const { setNodes, getNodes } = useReactFlow();
 
   const handleSave = async () => {
     try {
-      await updateNode(id, { data: editData });
+      // Get the current node to preserve position
+      const currentNode = getNodes().find(n => n.id === id);
+      if (!currentNode) return;
+      
+      // Send complete node data including position
+      await updateNode(id, {
+        type: currentNode.type,
+        position: currentNode.position,
+        data: editData
+      });
+      
       setNodes((nodes) =>
         nodes.map((node) =>
           node.id === id ? { ...node, data: editData } : node
@@ -245,11 +255,21 @@ const TourStepNode = ({ data, id }: { data: any; id: string }) => {
 const QuestionNode = ({ data, id }: { data: any; id: string }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(data);
-  const { setNodes } = useReactFlow();
+  const { setNodes, getNodes } = useReactFlow();
 
   const handleSave = async () => {
     try {
-      await updateNode(id, { data: editData });
+      // Get the current node to preserve position
+      const currentNode = getNodes().find(n => n.id === id);
+      if (!currentNode) return;
+      
+      // Send complete node data including position
+      await updateNode(id, {
+        type: currentNode.type,
+        position: currentNode.position,
+        data: editData
+      });
+      
       setNodes((nodes) =>
         nodes.map((node) =>
           node.id === id ? { ...node, data: editData } : node
@@ -475,6 +495,7 @@ const applyGridLayout = (nodes: Node[]): Node[] => {
   
   // Simple grid: steps on left, questions spread to the right in layers
   const stepY = 300; // All steps on same horizontal line
+  const questionBaseY = 500; // Questions positioned below steps
   const baseStepSpacing = 500;
   
   // Layout tour steps horizontally
@@ -485,9 +506,8 @@ const applyGridLayout = (nodes: Node[]): Node[] => {
     };
   });
   
-  // Layout questions in layers below the steps
+  // Layout questions in layers to the right
   let questionX = 600; // Start questions after first step
-  const questionBaseY = stepY + 200; // Position questions below step axis
   questions.forEach((node, index) => {
     node.position = {
       x: questionX,
@@ -508,27 +528,15 @@ const applyForceLayout = (nodes: Node[], edges: Edge[]): Node[] => {
   const centeringForce = 0.001;
   const minDistance = 200;
   
-  // Initialize positions with root-left layout and questions below steps
-  const tourSteps = forceNodes.filter(n => n.type === 'tourStep');
-  const questions = forceNodes.filter(n => n.type === 'question');
-  
+  // Initialize positions with root-left layout in mind
   forceNodes.forEach((node, index) => {
     if (!node.position.x || !node.position.y) {
-      if (node.type === 'tourStep') {
-        // Place tour steps on the main axis
-        const stepIndex = tourSteps.indexOf(node);
-        node.position = {
-          x: 200 + (stepIndex * 200) + (Math.random() - 0.5) * 50,
-          y: 300 + (Math.random() - 0.5) * 50, // Main step axis
-        };
-      } else {
-        // Place questions below the step axis
-        const questionIndex = questions.indexOf(node);
-        node.position = {
-          x: 600 + (questionIndex * 150) + (Math.random() - 0.5) * 50,
-          y: 500 + (questionIndex * 100) + (Math.random() - 0.5) * 50, // Below step axis
-        };
-      }
+      // Place tour steps starting from left, questions spread to the right
+      const baseX = node.type === 'tourStep' ? 200 + (index * 200) : 600 + (index * 150);
+      node.position = {
+        x: baseX + (Math.random() - 0.5) * 100,
+        y: 300 + (Math.random() - 0.5) * 200, // Center around Y=300
+      };
     }
   });
   
@@ -587,15 +595,14 @@ const applyForceLayout = (nodes: Node[], edges: Edge[]): Node[] => {
       node.position.x += forces[index].x;
       node.position.y += forces[index].y;
       
-      // Maintain vertical hierarchy: steps above, questions below
+      // Center the layout vertically
+      node.position.y += (300 - node.position.y) * centeringForce;
+      
+      // Keep tour steps towards the left, questions towards the right
       if (node.type === 'tourStep') {
-        // Keep tour steps on the main axis
-        node.position.y += (300 - node.position.y) * (centeringForce * 2);
         // Pull steps towards left side
         node.position.x += (Math.max(150, node.position.x - 200) - node.position.x) * (centeringForce * 0.5);
       } else {
-        // Keep questions below the step axis
-        node.position.y += (Math.max(500, node.position.y) - node.position.y) * (centeringForce * 2);
         // Keep questions on the right side
         node.position.x += (Math.max(600, node.position.x) - node.position.x) * (centeringForce * 0.5);
       }
@@ -676,17 +683,15 @@ const enforceHierarchy = (nodes: Node[], edges: Edge[]): Node[] => {
     const connectedQuestions = stepToQuestions.get(stepId) || [];
     
     if (connectedQuestions.length > 0) {
-      // Position questions in separate X layers below the parent step
+      // Position questions in separate X layers with independent Y positioning
       connectedQuestions.forEach((questionId, questionIndex) => {
         const questionNode = hierarchicalNodes.find(n => n.id === questionId);
         if (questionNode) {
           // Each question gets its own X layer to the right
           const questionLayerX = stepNode.position.x + 400 + (questionIndex * 350);
           questionNode.position.x = questionLayerX;
-          // Position questions below the parent step's Y axis with spacing to avoid overlaps
-          const baseQuestionY = stepNode.position.y + 200; // 200px below parent step
-          questionNode.position.y = baseQuestionY + (questionIndex * 180); // Stagger vertically to avoid overlaps
-          console.log(`📍 Positioning question ${questionId} at X=${questionLayerX}, Y=${questionNode.position.y} (below step)`);
+          // Let questions maintain their own Y positions (no forced alignment)
+          console.log(`📍 Positioning question ${questionId} at X=${questionLayerX}, keeping Y=${questionNode.position.y}`);
         }
       });
       
@@ -1008,7 +1013,7 @@ export function DecisionTree() {
     } finally {
       setIsLoading(false);
     }
-  }, [setNodes, setEdges]);
+  }, []);
 
 
 
@@ -1349,7 +1354,7 @@ export function DecisionTree() {
               <div className="text-xs text-gray-600 p-2 bg-blue-50 rounded border">
                 💡 <strong>Root-Left Layered Layout:</strong><br/>
                 🔵 Root tour step starts on the left<br/>
-                🟢 Questions positioned below parent steps with no overlaps<br/>
+                🟢 Questions from same step: separate X layers, independent Y positioning<br/>
                 <strong>Connect:</strong> Drag from right handle to left handle<br/>
                 <strong>Delete:</strong> Select connections and click delete button
               </div>

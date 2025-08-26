@@ -108,6 +108,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const steps = await convertDatabaseToTourSteps();
       set({ databaseTourSteps: steps, isLoadingDatabaseTour: false });
+      console.log('Database tour steps loaded successfully:', steps.length);
     } catch (error) {
       console.error('Failed to load database tour steps:', error);
       set({ isLoadingDatabaseTour: false });

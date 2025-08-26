@@ -178,9 +178,10 @@ export function GuidedTour() {
   // Load database tour steps when switching to database mode
   useEffect(() => {
     if (useDatabaseTour && databaseTourSteps.length === 0 && !isLoadingDatabaseTour) {
+      // Only load if we're actually in database tour mode and don't have data yet
       loadDatabaseTourSteps();
     }
-  }, [useDatabaseTour, databaseTourSteps.length, isLoadingDatabaseTour, loadDatabaseTourSteps]);
+  }, [useDatabaseTour, databaseTourSteps.length, isLoadingDatabaseTour]);
   const currentStep = applicableSteps[currentStepIndex];
   const isLastStep = currentStepIndex === applicableSteps.length - 1;
   const isFirstStep = currentStepIndex === 0;
@@ -233,50 +234,62 @@ export function GuidedTour() {
         // Complete the tour
         handleComplete();
       } else {
-        // Find next applicable step
-        const allSteps = guidedTourSteps;
-        const currentStepId = currentStep.id;
-        const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
-        
-        // Find next applicable step from the full list
-        for (let i = currentFullIndex + 1; i < allSteps.length; i++) {
-          const candidateStep = allSteps[i];
-          if (!candidateStep.condition || candidateStep.condition(formAnswers)) {
-            // Update to this step index in the applicable steps array
-            const nextApplicableIndex = applicableSteps.findIndex(step => step.id === candidateStep.id);
-            if (nextApplicableIndex !== -1) {
-              nextStep();
-              setValidationErrors([]);
-              return;
+        // For database tour, simply go to next step in the array
+        if (useDatabaseTour) {
+          nextStep();
+          setValidationErrors([]);
+        } else {
+          // For static tour, use the conditional logic
+          const allSteps = guidedTourSteps;
+          const currentStepId = currentStep.id;
+          const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
+          
+          // Find next applicable step from the full list
+          for (let i = currentFullIndex + 1; i < allSteps.length; i++) {
+            const candidateStep = allSteps[i];
+            if (!candidateStep.condition || candidateStep.condition(formAnswers)) {
+              // Update to this step index in the applicable steps array
+              const nextApplicableIndex = applicableSteps.findIndex(step => step.id === candidateStep.id);
+              if (nextApplicableIndex !== -1) {
+                nextStep();
+                setValidationErrors([]);
+                return;
+              }
             }
           }
+          
+          // If no next step found, complete the tour
+          handleComplete();
         }
-        
-        // If no next step found, complete the tour
-        handleComplete();
       }
     }
   };
 
   const handlePrevious = () => {
-    // Find previous applicable step
-    const allSteps = guidedTourSteps;
-    const currentStepId = currentStep.id;
-    const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
-    
-    // Find previous applicable step from the full list
-    for (let i = currentFullIndex - 1; i >= 0; i--) {
-      const candidateStep = allSteps[i];
-      if (!candidateStep.condition || candidateStep.condition(formAnswers)) {
-        previousStep();
-        setValidationErrors([]);
-        return;
+    // For database tour, simply go to previous step in the array
+    if (useDatabaseTour) {
+      previousStep();
+      setValidationErrors([]);
+    } else {
+      // For static tour, use the conditional logic
+      const allSteps = guidedTourSteps;
+      const currentStepId = currentStep.id;
+      const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
+      
+      // Find previous applicable step from the full list
+      for (let i = currentFullIndex - 1; i >= 0; i--) {
+        const candidateStep = allSteps[i];
+        if (!candidateStep.condition || candidateStep.condition(formAnswers)) {
+          previousStep();
+          setValidationErrors([]);
+          return;
+        }
       }
+      
+      // If no previous step found, just go back one step
+      previousStep();
+      setValidationErrors([]);
     }
-    
-    // If no previous step found, just go back one step
-    previousStep();
-    setValidationErrors([]);
   };
 
   const handleComplete = () => {
@@ -505,9 +518,27 @@ export function GuidedTour() {
                 {isLoadingDatabaseTour ? "Loading..." : useDatabaseTour ? "🔗 Database" : "📋 Static"}
               </Button>
               {useDatabaseTour && (
-                <span className="text-xs text-purple-600 font-medium">
-                  Using Decision Tree
-                </span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-purple-600 font-medium">
+                    Using Decision Tree
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!isLoadingDatabaseTour) {
+                        // Reset the tour state and reload fresh data
+                        resetGuidedTour();
+                        loadDatabaseTourSteps();
+                      }
+                    }}
+                    disabled={isLoadingDatabaseTour}
+                    className="text-xs h-6 px-2"
+                    title="Refresh tour with latest decision tree data"
+                  >
+                    {isLoadingDatabaseTour ? "..." : "🔄"}
+                  </Button>
+                </div>
               )}
             </div>
           </div>

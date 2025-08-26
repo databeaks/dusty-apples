@@ -118,6 +118,7 @@ export interface TourQuestion {
 
 export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
   try {
+    console.log('Starting conversion of database to tour steps...');
     const data = await getDecisionTree();
     
     if (!data || !data.nodes || !data.edges) {
@@ -138,9 +139,8 @@ export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
       questionNodes: questionNodes.length 
     });
 
-    // Create adjacency maps for navigation
+    // Create adjacency maps for navigation (simplified)
     const outgoingEdges = new Map(); // source -> [targets]
-    const incomingEdges = new Map(); // target -> [sources]
     
     data.edges.forEach((edge: any) => {
       // Outgoing edges
@@ -148,37 +148,24 @@ export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
         outgoingEdges.set(edge.source, []);
       }
       outgoingEdges.get(edge.source).push(edge);
-      
-      // Incoming edges  
-      if (!incomingEdges.has(edge.target)) {
-        incomingEdges.set(edge.target, []);
-      }
-      incomingEdges.get(edge.target).push(edge);
     });
-
-    // Find root nodes (nodes with no incoming edges or tour steps that are entry points)
-    const rootNodes = stepNodes.filter(node => 
-      !incomingEdges.has(node.id) || 
-      (stepNodes.length === 1) // If only one step, it's the root
-    );
-
-    console.log('Root nodes found:', rootNodes.length);
-
-    if (rootNodes.length === 0 && stepNodes.length > 0) {
-      // If no clear root, use the first step node
-      rootNodes.push(stepNodes[0]);
-      console.log('No root found, using first step node as root');
-    }
 
     // Build tour steps following the flow
     const tourSteps: TourStep[] = [];
     const processedNodes = new Set();
+    
+    console.log('Processing nodes:', {
+      stepNodes: stepNodes.map(n => ({ id: n.id, title: n.data?.title || 'No title' })),
+      questionNodes: questionNodes.map(n => ({ id: n.id, title: n.data?.title || 'No title' }))
+    });
 
     const processNode = (node: any, stepIndex: number): TourStep | null => {
       if (processedNodes.has(node.id)) {
+        console.log(`⚠️ Node ${node.id} already processed, skipping`);
         return null;
       }
       
+      console.log(`✅ Processing node ${node.id} (${node.type})`);
       processedNodes.add(node.id);
       const nodeData = node.data || {};
 
@@ -245,41 +232,46 @@ export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
       return null;
     };
 
-    // Process nodes starting from roots
-    const nodesToProcess = [...rootNodes];
+    // Process nodes in a specific order to avoid duplicates
     let stepIndex = 0;
-
-    while (nodesToProcess.length > 0) {
-      const currentNode = nodesToProcess.shift();
-      if (!currentNode) continue;
-
-      const tourStep = processNode(currentNode, stepIndex);
-      if (tourStep) {
-        tourSteps.push(tourStep);
-        stepIndex++;
-      }
-
-      // Add connected nodes to processing queue
-      const connectedEdges = outgoingEdges.get(currentNode.id) || [];
-      connectedEdges.forEach((edge: any) => {
-        const targetNode = [...stepNodes, ...questionNodes].find(n => n.id === edge.target);
-        if (targetNode && !processedNodes.has(targetNode.id)) {
-          nodesToProcess.push(targetNode);
-        }
-      });
-    }
-
-    // Process any remaining unconnected nodes
-    const allNodes = [...stepNodes, ...questionNodes];
-    allNodes.forEach(node => {
-      if (!processedNodes.has(node.id)) {
-        const tourStep = processNode(node, stepIndex);
+    
+    // First, process all tour step nodes (they become the main tour steps)
+    console.log('🔄 Processing tour step nodes...');
+    for (const stepNode of stepNodes) {
+      if (!processedNodes.has(stepNode.id)) {
+        const tourStep = processNode(stepNode, stepIndex);
         if (tourStep) {
+          console.log(`📝 Created tour step: ${tourStep.title} with ${tourStep.questions.length} questions`);
           tourSteps.push(tourStep);
           stepIndex++;
         }
       }
-    });
+    }
+    
+    // Then, process any standalone question nodes that aren't connected to any tour step
+    console.log('🔄 Processing standalone question nodes...');
+    for (const questionNode of questionNodes) {
+      // Check if this question is already processed as part of a tour step
+      if (!processedNodes.has(questionNode.id)) {
+        // Check if this question is connected to any tour step
+        const isConnectedToStep = data.edges.some(edge => 
+          edge.target === questionNode.id && 
+          stepNodes.some(step => step.id === edge.source)
+        );
+        
+        console.log(`🔍 Question ${questionNode.id}: connected to step = ${isConnectedToStep}`);
+        
+        // Only process as standalone if not connected to any step
+        if (!isConnectedToStep) {
+          const tourStep = processNode(questionNode, stepIndex);
+          if (tourStep) {
+            console.log(`📝 Created standalone question step: ${tourStep.title}`);
+            tourSteps.push(tourStep);
+            stepIndex++;
+          }
+        }
+      }
+    }
 
     console.log('Generated tour steps:', tourSteps.length);
     console.log('Tour steps preview:', tourSteps.map(step => ({ 
