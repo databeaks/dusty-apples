@@ -1,9 +1,13 @@
 import os
 import logging
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+
+# Import our modules
+from backend.database import init_database
+from backend.routers import basic, decision_tree
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -28,33 +32,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- API Routes ---
-@app.get("/api/hello")
-async def hello():
-    logger.info("Accessed /api/hello")
-    return {"message": "Hello from FastAPI!"}
+# --- Include Routers ---
+app.include_router(basic.router)
+app.include_router(decision_tree.router)
 
-@app.get("/api/health")
-async def health_check():
-    logger.info("Health check at /api/health")
-    return {"status": "healthy"}
-
-@app.get("/api/data")
-async def get_data():
-    logger.info("Data requested at /api/data")
-    data = [{"x": x, "y": 2 ** x} for x in range(30)]
-    return {
-        "data": data,
-        "title": "Hello world!",
-        "x_title": "Apps",
-        "y_title": "Fun with data"
-    }
-
-@app.get("/api/user")
-async def get_user(request: Request):
-    logger.info("User info requested at /api/user")
-    user_email = request.headers.get("X-Forwarded-Email", "test@example.com")
-    return {"email": user_email}
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    init_database()
 
 # --- Static Files Setup ---
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build")

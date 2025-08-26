@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { TourStep } from '@/lib/fastapi';
 
 export interface FormAnswers {
   [questionId: string]: string | string[];
@@ -6,13 +7,16 @@ export interface FormAnswers {
 
 interface AppStore {
   // Navigation state
-  currentView: 'dashboard' | 'guided-tour';
-  setCurrentView: (view: 'dashboard' | 'guided-tour') => void;
+  currentView: 'home' | 'dashboard' | 'guided-tour';
+  setCurrentView: (view: 'home' | 'dashboard' | 'guided-tour') => void;
   
   // Guided tour state
   currentStepIndex: number;
   formAnswers: FormAnswers;
   isGuidedTourOpen: boolean;
+  useDatabaseTour: boolean;
+  databaseTourSteps: TourStep[];
+  isLoadingDatabaseTour: boolean;
   
   // Guided tour actions
   setCurrentStepIndex: (index: number) => void;
@@ -25,14 +29,23 @@ interface AppStore {
   
   // Form validation
   isCurrentStepValid: () => boolean;
+  
+  // Database tour actions
+  setUseDatabaseTour: (use: boolean) => void;
+  setDatabaseTourSteps: (steps: TourStep[]) => void;
+  setIsLoadingDatabaseTour: (loading: boolean) => void;
+  loadDatabaseTourSteps: () => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
   // Initial state
-  currentView: 'dashboard',
+  currentView: 'home',
   currentStepIndex: 0,
   formAnswers: {},
   isGuidedTourOpen: false,
+  useDatabaseTour: false,
+  databaseTourSteps: [],
+  isLoadingDatabaseTour: false,
   
   // Navigation actions
   setCurrentView: (view) => set({ currentView: view }),
@@ -61,7 +74,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   closeGuidedTour: () =>
     set({
       isGuidedTourOpen: false,
-      currentView: 'dashboard',
+      currentView: 'home',
     }),
   
   nextStep: () =>
@@ -80,5 +93,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // This will be implemented when we import the step data
     // For now, return true
     return true;
+  },
+  
+  // Database tour actions
+  setUseDatabaseTour: (use) => set({ useDatabaseTour: use }),
+  
+  setDatabaseTourSteps: (steps) => set({ databaseTourSteps: steps }),
+  
+  setIsLoadingDatabaseTour: (loading) => set({ isLoadingDatabaseTour: loading }),
+  
+  loadDatabaseTourSteps: async () => {
+    const { convertDatabaseToTourSteps } = await import('@/lib/fastapi');
+    set({ isLoadingDatabaseTour: true });
+    try {
+      const steps = await convertDatabaseToTourSteps();
+      set({ databaseTourSteps: steps, isLoadingDatabaseTour: false });
+    } catch (error) {
+      console.error('Failed to load database tour steps:', error);
+      set({ isLoadingDatabaseTour: false });
+    }
   },
 }));

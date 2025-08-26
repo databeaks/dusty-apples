@@ -1,0 +1,11 @@
+---
+description: >
+  Enforce that all TypeScript interfaces are declared in the `types/` directory
+  to keep domain types centralized and reusable across the app.
+globs:
+alwaysApply: true
+---
+- Place all `interface` declarations in files under `types/` (e.g., `types/api.ts`, `types/state.ts`).
+- Do not declare interfaces inside `app/`, `components/`, `lib/`, or `backend/` files; import them from `types/` instead.
+- For component-only shapes, prefer a local `type` alias. When a shape is shared across files, promote it to an `interface` in `types/` and import it where used.
+- Use named exports for interfaces in `types/` to keep modules tree-shake friendly; avoid default exports.

@@ -3,6 +3,7 @@
 
 import { useAppStore } from '@/lib/store/appStore';
 import { Navigation } from '@/components/navigation';
+import { Home as HomePage } from '@/components/home';
 import { Dashboard } from '@/components/dashboard';
 import { GuidedTour } from '@/components/guidedTour';
 
@@ -11,12 +12,14 @@ export default function Home() {
 
   const renderCurrentView = () => {
     switch (currentView) {
+      case 'home':
+        return <HomePage />;
       case 'dashboard':
         return <Dashboard />;
       case 'guided-tour':
-        return <Dashboard />; // Show dashboard as background
+        return <HomePage />; // Show home as background
       default:
-        return <Dashboard />;
+        return <HomePage />;
     }
   };
 

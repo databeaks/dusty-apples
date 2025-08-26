@@ -3,12 +3,15 @@
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store/appStore';
 import { getUser } from '@/lib/fastapi';
-import { Home, Settings, Bell, User, Menu, Loader2 } from 'lucide-react';
+import { Home, Settings, Bell, User, Menu, Loader2, BarChart3, GitBranch } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export function Navigation() {
   const { currentView, setCurrentView } = useAppStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
   const [userData, setUserData] = useState<any>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [userError, setUserError] = useState<string | null>(null);
@@ -32,9 +35,11 @@ export function Navigation() {
   }, []);
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home },
-    { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'home', label: 'Home', icon: Home, path: '/', isView: true },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/', isView: true },
+    { id: 'decision-tree', label: 'Decision Tree', icon: GitBranch, path: '/decision-tree', isView: false },
+    { id: 'settings', label: 'Settings', icon: Settings, path: '/', isView: true },
+    { id: 'notifications', label: 'Notifications', icon: Bell, path: '/', isView: true },
   ];
 
   return (
@@ -54,21 +59,41 @@ export function Navigation() {
             <div className="hidden md:ml-8 md:flex md:space-x-8">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = currentView === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setCurrentView(item.id as any)}
-                    className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      isActive
-                        ? 'text-red-600 bg-red-50'
-                        : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 mr-2" />
-                    {item.label}
-                  </button>
-                );
+                const isActive = item.isView 
+                  ? currentView === item.id 
+                  : pathname === item.path;
+                
+                if (item.isView) {
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setCurrentView(item.id as any)}
+                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive
+                          ? 'text-red-600 bg-red-50'
+                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {item.label}
+                    </button>
+                  );
+                } else {
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.path}
+                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive
+                          ? 'text-red-600 bg-red-50'
+                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {item.label}
+                    </Link>
+                  );
+                }
               })}
             </div>
           </div>
@@ -113,24 +138,45 @@ export function Navigation() {
             <div className="space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = currentView === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentView(item.id as any);
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className={`w-full text-left flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors ${
-                      isActive
-                        ? 'text-red-600 bg-red-50'
-                        : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5 mr-3" />
-                    {item.label}
-                  </button>
-                );
+                const isActive = item.isView 
+                  ? currentView === item.id 
+                  : pathname === item.path;
+                
+                if (item.isView) {
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setCurrentView(item.id as any);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full text-left flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors ${
+                        isActive
+                          ? 'text-red-600 bg-red-50'
+                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 mr-3" />
+                      {item.label}
+                    </button>
+                  );
+                } else {
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.path}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`w-full text-left flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors ${
+                        isActive
+                          ? 'text-red-600 bg-red-50'
+                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 mr-3" />
+                      {item.label}
+                    </Link>
+                  );
+                }
               })}
             </div>
           </div>

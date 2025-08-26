@@ -17,27 +17,150 @@ export interface FormStep {
   title: string;
   description: string;
   questions: FormQuestion[];
+  condition?: (answers: any) => boolean;
 }
 
 export const guidedTourSteps: FormStep[] = [
   {
-    id: 'welcome',
-    title: 'Welcome to Your Setup',
-    description: 'Let\'s get to know your needs and preferences to customize your experience.',
+    id: 'customer-type',
+    title: 'Customer Scenario',
+    description: 'Let\'s identify your situation to recommend the optimal Databricks workspace setup.',
     questions: [
       {
-        id: 'role',
+        id: 'customer-type',
         type: 'select',
-        title: 'What\'s your primary role?',
-        description: 'This helps us tailor the experience for you.',
-        options: ['Product Manager', 'Engineer', 'Designer', 'Executive', 'Other'],
+        title: 'Which scenario best describes your situation?',
+        description: 'This determines your qualification path and available options.',
+        options: [
+          'New Customer (Trial)',
+          'Existing Customer (Sandbox)',
+          'Production on Azure/GCP',
+          'AWS Customer/Cloud Migration'
+        ],
         required: true,
       },
+    ],
+  },
+  {
+    id: 'use-case-category',
+    title: 'Primary Use Case',
+    description: 'What\'s your main focus area? This helps us understand your technical requirements.',
+    condition: (answers) => ['New Customer (Trial)', 'Existing Customer (Sandbox)', 'AWS Customer/Cloud Migration'].includes(answers['customer-type']),
+    questions: [
       {
-        id: 'company_size',
+        id: 'use-case-category',
         type: 'select',
-        title: 'What\'s your company size?',
-        options: ['1-10 employees', '11-50 employees', '51-200 employees', '201-1000 employees', '1000+ employees'],
+        title: 'What\'s your primary use case category?',
+        description: 'Select the area that best represents your main needs.',
+        options: [
+          'Generative AI & Machine Learning',
+          'Connectivity Requirements',
+          'Business User Enablement',
+          'Data Analytics & Engineering'
+        ],
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'aws-billing',
+    title: 'AWS Billing Preference',
+    description: 'For AWS customers, let\'s determine your billing requirements.',
+    condition: (answers) => answers['customer-type'] === 'AWS Customer/Cloud Migration',
+    questions: [
+      {
+        id: 'aws-billing',
+        type: 'select',
+        title: 'How would you prefer to handle billing?',
+        description: 'This affects your deployment options and setup process.',
+        options: [
+          'Must use AWS Marketplace',
+          'Direct billing acceptable',
+          'Not sure / Need guidance'
+        ],
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'generative-ai-details',
+    title: 'Generative AI & ML Requirements',
+    description: 'Let\'s understand your specific AI and machine learning needs.',
+    condition: (answers) => answers['use-case-category'] === 'Generative AI & Machine Learning',
+    questions: [
+      {
+        id: 'generative-ai-details',
+        type: 'multiselect',
+        title: 'Which AI/ML capabilities do you need?',
+        description: 'Select all that apply to your requirements.',
+        options: [
+          'Genie Spaces (Serverless Compatible)',
+          'Mosaic AI Testing (Serverless Compatible)',
+          'GPU Development Work (Classic Required)',
+          'ML Runtime/MLlib (Classic Required)'
+        ],
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'connectivity-details',
+    title: 'Connectivity Requirements',
+    description: 'What are your data connectivity and integration needs?',
+    condition: (answers) => answers['use-case-category'] === 'Connectivity Requirements',
+    questions: [
+      {
+        id: 'connectivity-details',
+        type: 'multiselect',
+        title: 'Which connectivity features do you need?',
+        description: 'Select all that apply to your integration requirements.',
+        options: [
+          'PrivateLink to APIs (Classic Required)',
+          'On-Premises/Private DB via Lakeflow Connect (Classic Required)',
+          'SaaS Federation (not Lakeflow) (Serverless Compatible)'
+        ],
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'business-user-details',
+    title: 'Business User Enablement',
+    description: 'What business user features are most important to you?',
+    condition: (answers) => answers['use-case-category'] === 'Business User Enablement',
+    questions: [
+      {
+        id: 'business-user-details',
+        type: 'multiselect',
+        title: 'Which business user capabilities do you need?',
+        description: 'Select all that apply to your business user requirements.',
+        options: [
+          'Databricks One (Serverless Compatible)',
+          'AI/BI Dashboards (Serverless Compatible)',
+          'Databricks Apps (Serverless Compatible)'
+        ],
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'analytics-engineering-details',
+    title: 'Analytics & Engineering Requirements',
+    description: 'What are your data analytics and engineering needs?',
+    condition: (answers) => answers['use-case-category'] === 'Data Analytics & Engineering',
+    questions: [
+      {
+        id: 'analytics-engineering-details',
+        type: 'multiselect',
+        title: 'Which analytics and engineering features do you need?',
+        description: 'Select all that apply to your data processing requirements.',
+        options: [
+          'Exploratory Analytics (Notebooks/SQL) (Serverless Compatible)',
+          'Serverless Declarative Pipelines (Serverless Compatible)',
+          'Legacy Spark RDDs (Classic Required)',
+          'Scala/R Primary Languages (Classic Required)',
+          'Streaming with Trigger Intervals (Classic Required)'
+        ],
         required: true,
       },
     ],
@@ -178,7 +301,270 @@ export const guidedTourSteps: FormStep[] = [
       },
     ],
   },
+  {
+    id: 'recommendation',
+    title: 'Your Recommended Setup',
+    description: 'Based on your responses, here\'s what we recommend for your deployment.',
+    questions: [
+      {
+        id: 'contact_info',
+        type: 'text',
+        title: 'Email address (optional)',
+        description: 'We can send you setup instructions and updates.',
+        required: false,
+      },
+      {
+        id: 'timeline',
+        type: 'select',
+        title: 'When are you looking to get started?',
+        options: ['Immediately', 'Within 2 weeks', 'Within a month', '2-3 months', 'Just exploring'],
+        required: true,
+      },
+    ],
+  },
 ];
+
+// Recommendation system interfaces and data
+export interface DeploymentRecommendation {
+  id: string;
+  title: string;
+  qualification: 'Yes' | 'Not Yet' | 'Maybe';
+  description: string;
+  actions: string[];
+  timeline?: string;
+  benefits: string[];
+  nextSteps: string[];
+  isAvailable: boolean;
+}
+
+// Classification of requirements
+const CLASSIC_REQUIRED_FEATURES = [
+  'GPU Development Work (Classic Required)',
+  'ML Runtime/MLlib (Classic Required)',
+  'PrivateLink to APIs (Classic Required)',
+  'On-Premises/Private DB via Lakeflow Connect (Classic Required)',
+  'Legacy Spark RDDs (Classic Required)',
+  'Scala/R Primary Languages (Classic Required)',
+  'Streaming with Trigger Intervals (Classic Required)'
+];
+
+const SERVERLESS_COMPATIBLE_FEATURES = [
+  'Genie Spaces (Serverless Compatible)',
+  'Mosaic AI Testing (Serverless Compatible)',
+  'SaaS Federation (not Lakeflow) (Serverless Compatible)',
+  'Databricks One (Serverless Compatible)',
+  'AI/BI Dashboards (Serverless Compatible)',
+  'Databricks Apps (Serverless Compatible)',
+  'Exploratory Analytics (Notebooks/SQL) (Serverless Compatible)',
+  'Serverless Declarative Pipelines (Serverless Compatible)'
+];
+
+interface TechnicalRequirements {
+  needsClassic: boolean;
+  needsServerless: boolean;
+  classicFeatures: string[];
+  serverlessFeatures: string[];
+}
+
+const gatherTechnicalRequirements = (answers: any): TechnicalRequirements => {
+  const allSelectedFeatures = [
+    ...(answers['generative-ai-details'] || []),
+    ...(answers['connectivity-details'] || []),
+    ...(answers['business-user-details'] || []),
+    ...(answers['analytics-engineering-details'] || [])
+  ];
+
+  const classicFeatures = allSelectedFeatures.filter(feature => 
+    CLASSIC_REQUIRED_FEATURES.includes(feature)
+  );
+  
+  const serverlessFeatures = allSelectedFeatures.filter(feature => 
+    SERVERLESS_COMPATIBLE_FEATURES.includes(feature)
+  );
+
+  return {
+    needsClassic: classicFeatures.length > 0,
+    needsServerless: serverlessFeatures.length > 0,
+    classicFeatures,
+    serverlessFeatures
+  };
+};
+
+export const getRecommendation = (answers: any): DeploymentRecommendation => {
+  const customerType = answers['customer-type'];
+  
+  // Handle Azure/GCP Production
+  if (customerType === 'Production on Azure/GCP') {
+    return {
+      id: 'azure-gcp-not-available',
+      title: 'Azure/GCP Production Deployment',
+      qualification: 'Not Yet',
+      description: 'Full production deployment capabilities for Azure and GCP are coming soon.',
+      actions: ['Join early access program', 'Get notified of availability'],
+      timeline: 'ETA: H2 FY26 (Second half of fiscal year 2026)',
+      benefits: [
+        'Native cloud integration',
+        'Enterprise-grade security',
+        'Auto-scaling capabilities',
+        'Multi-region deployment'
+      ],
+      nextSteps: [
+        'Join our early access waitlist',
+        'Schedule architecture consultation',
+        'Consider interim trial setup',
+        'Review integration requirements'
+      ],
+      isAvailable: false
+    };
+  }
+
+  // Handle simple cases (New/Trial, Existing Sandbox)
+  if (customerType === 'New Customer (Trial)' || customerType === 'Existing Customer (Sandbox)') {
+    return {
+      id: 'serverless-recommended',
+      title: 'Serverless Workspace Recommended',
+      qualification: 'Yes',
+      description: 'Express setup with serverless workspace meets your needs perfectly.',
+      actions: ['Sign up with Express', 'Create serverless workspace', 'Access sample datasets'],
+      benefits: [
+        'Get started in minutes',
+        'No infrastructure setup required',
+        'Built-in sample data and tutorials',
+        'Scales automatically with usage',
+        'Pay-per-use pricing model'
+      ],
+      nextSteps: [
+        'Complete account creation',
+        'Explore sample workflows',
+        'Schedule onboarding call',
+        'Invite team members'
+      ],
+      isAvailable: true
+    };
+  }
+
+  // Handle AWS Complex Logic
+  if (customerType === 'AWS Customer/Cloud Migration') {
+    // Check AWS Marketplace requirement first
+    if (answers['aws-billing'] === 'Must use AWS Marketplace') {
+      return {
+        id: 'aws-marketplace',
+        title: 'Express Setup + Buy with AWS',
+        qualification: 'Yes',
+        description: 'Set up Express and upgrade using Buy with AWS for marketplace billing.',
+        actions: ['Express setup', 'Upgrade via Buy with AWS', 'Configure workspace'],
+        benefits: [
+          'Consolidated AWS billing',
+          'Use existing AWS credits',
+          'Simplified procurement process',
+          'AWS security compliance',
+          'Familiar AWS marketplace experience'
+        ],
+        nextSteps: [
+          'Visit AWS Marketplace listing',
+          'Complete subscription setup',
+          'Configure workspace settings',
+          'Connect existing AWS resources'
+        ],
+        isAvailable: true
+      };
+    }
+
+    // Analyze technical requirements for direct billing customers
+    const requirements = gatherTechnicalRequirements(answers);
+    
+    if (requirements.needsClassic && requirements.needsServerless) {
+      return {
+        id: 'hybrid-approach',
+        title: 'Both Workspace Types Needed',
+        qualification: 'Maybe',
+        description: 'Start with Express for immediate needs, then add classic workspace for advanced features.',
+        actions: ['Start with Express setup', 'Plan classic workspace deployment', 'Migrate advanced workloads'],
+        benefits: [
+          'Quick initial deployment',
+          'Full feature compatibility',
+          'Flexible migration path',
+          'Cost optimization opportunities',
+          'Best of both architectures'
+        ],
+        nextSteps: [
+          'Begin with Express setup',
+          'Test serverless-compatible workloads',
+          'Schedule classic workspace planning',
+          'Design migration strategy'
+        ],
+        isAvailable: true
+      };
+    } else if (requirements.needsClassic) {
+      return {
+        id: 'classic-workspace',
+        title: 'Classic Workspace Required',
+        qualification: 'Maybe',
+        description: 'Your requirements need cloud assets deployed in your environment.',
+        actions: ['Deploy classic workspace', 'Configure cloud resources', 'Set up connectivity'],
+        benefits: [
+          'Full feature compatibility',
+          'Custom infrastructure control',
+          'Advanced networking options',
+          'Legacy workload support',
+          'Enterprise-grade isolation'
+        ],
+        nextSteps: [
+          'Plan classic workspace architecture',
+          'Configure cloud resources',
+          'Set up required connectivity',
+          'Migrate existing workloads'
+        ],
+        isAvailable: true
+      };
+    } else {
+      return {
+        id: 'serverless-workspace',
+        title: 'Serverless Workspace Recommended',
+        qualification: 'Yes',
+        description: 'Express setup with serverless workspace meets all your technical requirements.',
+        actions: ['Express setup', 'Serverless workspace', 'Configure integrations'],
+        benefits: [
+          'Pay-per-use pricing',
+          'Auto-scaling resources',
+          'Reduced operational overhead',
+          'Quick time to value',
+          'Serverless architecture benefits'
+        ],
+        nextSteps: [
+          'Complete Express setup',
+          'Configure serverless environment',
+          'Import existing data sources',
+          'Set up monitoring and governance'
+        ],
+        isAvailable: true
+      };
+    }
+  }
+
+  // Fallback recommendation
+  return {
+    id: 'consultation-required',
+    title: 'Custom Consultation Required',
+    qualification: 'Maybe',
+    description: 'Let\'s discuss your specific needs to find the best deployment approach.',
+    actions: ['Schedule consultation', 'Technical requirements review', 'Custom solution design'],
+    benefits: [
+      'Personalized approach',
+      'Expert technical guidance',
+      'Custom solution architecture',
+      'Risk assessment and mitigation',
+      'Tailored deployment strategy'
+    ],
+    nextSteps: [
+      'Book consultation call',
+      'Prepare requirements document',
+      'Technical architecture review',
+      'Develop custom deployment plan'
+    ],
+    isAvailable: true
+  };
+};
 
 // Dashboard sample data
 export interface DashboardMetric {

@@ -5,13 +5,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store/appStore';
-import { guidedTourSteps, FormQuestion, FormStep } from '@/lib/data/sampleData';
+import { guidedTourSteps, FormQuestion, FormStep, getRecommendation, DeploymentRecommendation } from '@/lib/data/sampleData';
+import { convertDatabaseToTourSteps, TourStep, TourQuestion } from '@/lib/fastapi';
 import { 
   ChevronLeft, 
   ChevronRight, 
   X, 
   Check,
-  AlertCircle
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
+  ExternalLink,
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
 
 interface QuestionInputProps {
@@ -150,12 +157,32 @@ export function GuidedTour() {
     previousStep,
     updateFormAnswer,
     resetGuidedTour,
+    useDatabaseTour,
+    databaseTourSteps,
+    isLoadingDatabaseTour,
+    setUseDatabaseTour,
+    loadDatabaseTourSteps,
   } = useAppStore();
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [recommendation, setRecommendation] = useState<DeploymentRecommendation | null>(null);
   
-  const currentStep = guidedTourSteps[currentStepIndex];
-  const isLastStep = currentStepIndex === guidedTourSteps.length - 1;
+  // Get applicable steps based on current answers and tour mode
+  const getApplicableSteps = () => {
+    const steps = useDatabaseTour ? databaseTourSteps : guidedTourSteps;
+    return steps.filter(step => !step.condition || step.condition(formAnswers));
+  };
+
+  const applicableSteps = getApplicableSteps();
+  
+  // Load database tour steps when switching to database mode
+  useEffect(() => {
+    if (useDatabaseTour && databaseTourSteps.length === 0 && !isLoadingDatabaseTour) {
+      loadDatabaseTourSteps();
+    }
+  }, [useDatabaseTour, databaseTourSteps.length, isLoadingDatabaseTour, loadDatabaseTourSteps]);
+  const currentStep = applicableSteps[currentStepIndex];
+  const isLastStep = currentStepIndex === applicableSteps.length - 1;
   const isFirstStep = currentStepIndex === 0;
 
   // Check if a question should be shown based on conditional logic
@@ -174,6 +201,14 @@ export function GuidedTour() {
 
   // Get visible questions for current step
   const visibleQuestions = currentStep?.questions.filter(shouldShowQuestion) || [];
+
+  // Calculate recommendation when on the final step
+  useEffect(() => {
+    if (currentStep?.id === 'recommendation') {
+      const rec = getRecommendation(formAnswers);
+      setRecommendation(rec);
+    }
+  }, [currentStep?.id, formAnswers]);
 
   // Validate current step
   const validateCurrentStep = (): boolean => {
@@ -198,13 +233,48 @@ export function GuidedTour() {
         // Complete the tour
         handleComplete();
       } else {
-        nextStep();
-        setValidationErrors([]);
+        // Find next applicable step
+        const allSteps = guidedTourSteps;
+        const currentStepId = currentStep.id;
+        const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
+        
+        // Find next applicable step from the full list
+        for (let i = currentFullIndex + 1; i < allSteps.length; i++) {
+          const candidateStep = allSteps[i];
+          if (!candidateStep.condition || candidateStep.condition(formAnswers)) {
+            // Update to this step index in the applicable steps array
+            const nextApplicableIndex = applicableSteps.findIndex(step => step.id === candidateStep.id);
+            if (nextApplicableIndex !== -1) {
+              nextStep();
+              setValidationErrors([]);
+              return;
+            }
+          }
+        }
+        
+        // If no next step found, complete the tour
+        handleComplete();
       }
     }
   };
 
   const handlePrevious = () => {
+    // Find previous applicable step
+    const allSteps = guidedTourSteps;
+    const currentStepId = currentStep.id;
+    const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
+    
+    // Find previous applicable step from the full list
+    for (let i = currentFullIndex - 1; i >= 0; i--) {
+      const candidateStep = allSteps[i];
+      if (!candidateStep.condition || candidateStep.condition(formAnswers)) {
+        previousStep();
+        setValidationErrors([]);
+        return;
+      }
+    }
+    
+    // If no previous step found, just go back one step
     previousStep();
     setValidationErrors([]);
   };
@@ -223,6 +293,182 @@ export function GuidedTour() {
     }
   };
 
+  // Recommendation component
+  const RecommendationCard = ({ rec }: { rec: DeploymentRecommendation }) => {
+    const getQualificationBadge = (qualification: string) => {
+      switch (qualification) {
+        case 'Yes':
+          return (
+            <Badge className="bg-green-100 text-green-800 border-green-200">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Ready to Deploy
+            </Badge>
+          );
+        case 'Not Yet':
+          return (
+            <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+              <Clock className="h-3 w-3 mr-1" />
+              Coming Soon
+            </Badge>
+          );
+        case 'Maybe':
+          return (
+            <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Partial Solution
+            </Badge>
+          );
+        default:
+          return null;
+      }
+    };
+
+    return (
+      <Card className="border-2 border-red-200 bg-red-50/30">
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-xl text-gray-900 mb-2">
+                {rec.title}
+              </CardTitle>
+              {getQualificationBadge(rec.qualification)}
+            </div>
+            <Sparkles className="h-6 w-6 text-red-500" />
+          </div>
+          <CardDescription className="text-base text-gray-700">
+            {rec.description}
+          </CardDescription>
+          {rec.timeline && (
+            <div className="mt-2 p-2 bg-orange-100 rounded-md border border-orange-200">
+              <p className="text-sm font-medium text-orange-800">
+                <Clock className="h-4 w-4 inline mr-1" />
+                {rec.timeline}
+              </p>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Actions */}
+          <div>
+            <h4 className="font-semibold text-gray-900 mb-3">Recommended Actions:</h4>
+            <div className="grid gap-2">
+              {rec.actions.map((action, index) => (
+                <div key={index} className="flex items-center">
+                  <ArrowRight className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                  <span className="text-sm text-gray-700">{action}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Benefits */}
+          <div>
+            <h4 className="font-semibold text-gray-900 mb-3">Key Benefits:</h4>
+            <div className="grid gap-2">
+              {rec.benefits.map((benefit, index) => (
+                <div key={index} className="flex items-center">
+                  <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
+                  <span className="text-sm text-gray-700">{benefit}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Next Steps */}
+          <div>
+            <h4 className="font-semibold text-gray-900 mb-3">Next Steps:</h4>
+            <div className="grid gap-2">
+              {rec.nextSteps.map((step, index) => (
+                <div key={index} className="flex items-start">
+                  <div className="w-6 h-6 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-xs font-medium mr-2 flex-shrink-0 mt-0.5">
+                    {index + 1}
+                  </div>
+                  <span className="text-sm text-gray-700">{step}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
+            {rec.isAvailable ? (
+              <>
+                <Button className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 flex-1">
+                  Get Started Now
+                  <ExternalLink className="h-4 w-4 ml-2" />
+                </Button>
+                <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
+                  Schedule Consultation
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 flex-1">
+                  Join Early Access
+                  <ExternalLink className="h-4 w-4 ml-2" />
+                </Button>
+                <Button variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50">
+                  Get Notified
+                </Button>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Show loading state for database tour
+  if (useDatabaseTour && isLoadingDatabaseTour) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Loading Database Tour</h3>
+          <p className="text-sm text-gray-600">Converting your decision tree into a guided tour...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if no steps available
+  if (useDatabaseTour && databaseTourSteps.length === 0 && !isLoadingDatabaseTour) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 text-center">
+          <div className="text-red-500 mb-4">
+            <X className="h-8 w-8 mx-auto" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Tour Steps Found</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Your decision tree doesn't contain any tour steps or questions. Please add some nodes to your decision tree first.
+          </p>
+          <div className="flex space-x-3">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setUseDatabaseTour(false);
+                closeGuidedTour();
+              }}
+              className="flex-1"
+            >
+              Switch to Static Tour
+            </Button>
+            <Button 
+              onClick={() => {
+                closeGuidedTour();
+                window.location.href = '/decision-tree';
+              }}
+              className="flex-1"
+            >
+              Edit Decision Tree
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentStep) {
     return null;
   }
@@ -235,14 +481,34 @@ export function GuidedTour() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Badge variant="secondary" className="text-xs">
-                Step {currentStepIndex + 1} of {guidedTourSteps.length}
+                Step {currentStepIndex + 1} of {applicableSteps.length}
               </Badge>
               <div className="w-32 bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-gradient-to-r from-red-600 to-orange-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${((currentStepIndex + 1) / guidedTourSteps.length) * 100}%` }}
+                  style={{ width: `${((currentStepIndex + 1) / applicableSteps.length) * 100}%` }}
                 />
               </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-gray-600">Tour Mode:</span>
+              <Button
+                variant={useDatabaseTour ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setUseDatabaseTour(!useDatabaseTour);
+                  resetGuidedTour(); // Reset progress when switching modes
+                }}
+                disabled={isLoadingDatabaseTour}
+                className={`text-xs ${useDatabaseTour ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+              >
+                {isLoadingDatabaseTour ? "Loading..." : useDatabaseTour ? "🔗 Database" : "📋 Static"}
+              </Button>
+              {useDatabaseTour && (
+                <span className="text-xs text-purple-600 font-medium">
+                  Using Decision Tree
+                </span>
+              )}
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={handleClose}>
@@ -276,7 +542,35 @@ export function GuidedTour() {
             </div>
           )}
 
-          {/* Questions */}
+                  {/* Recommendation Display (if on recommendation step) */}
+        {currentStep.id === 'recommendation' && recommendation && (
+          <div className="space-y-6">
+            <RecommendationCard rec={recommendation} />
+            
+            {/* Show regular questions below recommendation */}
+            {visibleQuestions.map((question) => (
+              <div key={question.id} className="space-y-3">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {question.title}
+                    {question.required && <span className="text-red-500 ml-1">*</span>}
+                  </h3>
+                  {question.description && (
+                    <p className="text-sm text-gray-600 mt-1">{question.description}</p>
+                  )}
+                </div>
+                <QuestionInput
+                  question={question}
+                  value={formAnswers[question.id] || (question.type === 'multiselect' ? [] : '')}
+                  onChange={(value) => updateFormAnswer(question.id, value)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Regular Questions (for non-recommendation steps) */}
+        {currentStep.id !== 'recommendation' && (
           <div className="space-y-6">
             {visibleQuestions.map((question) => (
               <div key={question.id} className="space-y-3">
@@ -297,6 +591,7 @@ export function GuidedTour() {
               </div>
             ))}
           </div>
+        )}
         </div>
 
         {/* Footer */}
