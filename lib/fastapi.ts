@@ -94,6 +94,22 @@ export const deleteEdge = async (edgeId: string) => {
   return response.data;
 };
 
+// Root node management functions
+export const setRootNode = async (nodeId: string) => {
+  const response = await api.post(`/decision-tree/nodes/${nodeId}/set-root`);
+  return response.data;
+};
+
+export const getRootNode = async () => {
+  const response = await api.get('/decision-tree/root');
+  return response.data;
+};
+
+export const validateTreeConnectivity = async () => {
+  const response = await api.get('/decision-tree/validate-connectivity');
+  return response.data;
+};
+
 // Function to convert database decision tree to guided tour format
 export interface TourStep {
   id: string;
@@ -101,6 +117,22 @@ export interface TourStep {
   description: string;
   questions: TourQuestion[];
   condition?: (answers: any) => boolean;
+  isRoot?: boolean;
+  nextStepId?: string;
+  conditionalRouting?: ConditionalRouting[];
+  target?: string;
+  placement?: 'top' | 'bottom' | 'left' | 'right' | 'center';
+  disableBeacon?: boolean;
+  showSkipButton?: boolean;
+  isConditionalOnly?: boolean; // Steps that are only reachable through conditional routing
+}
+
+export interface ConditionalRouting {
+  questionId: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'greater_than' | 'less_than' | 'in' | 'not_in';
+  value: string | string[] | number;
+  targetStepId: string;
+  description?: string;
 }
 
 export interface TourQuestion {
@@ -116,7 +148,74 @@ export interface TourQuestion {
   };
 }
 
-export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
+// Helper function to find step nodes that should be included in the static tour
+// This excludes steps that are only reachable through conditional routing
+const findStaticTourStepNodes = (
+  rootNode: any, 
+  stepNodes: any[], 
+  conditionalNodes: any[], 
+  edges: any[]
+): any[] => {
+  const staticSteps = new Set<string>();
+  const visited = new Set<string>();
+  const queue = [rootNode.id];
+  
+  console.log('🔍 Finding static tour steps from root:', rootNode.id);
+  
+  while (queue.length > 0) {
+    const currentNodeId = queue.shift()!;
+    
+    if (visited.has(currentNodeId)) {
+      continue;
+    }
+    visited.add(currentNodeId);
+    
+    console.log(`🔍 Analyzing node: ${currentNodeId}`);
+    
+    // If this is a step node (and not the root), add it to static steps
+    const isStepNode = stepNodes.some(s => s.id === currentNodeId);
+    if (isStepNode && currentNodeId !== rootNode.id) {
+      staticSteps.add(currentNodeId);
+      console.log(`✅ Added static step: ${currentNodeId}`);
+    }
+    
+    // Find all outgoing edges from current node
+    const outgoingEdges = edges.filter(edge => edge.source === currentNodeId);
+    
+    for (const edge of outgoingEdges) {
+      const targetNodeId = edge.target;
+      
+      if (visited.has(targetNodeId)) {
+        continue;
+      }
+      
+      // Check what type of node the target is
+      const isTargetStep = stepNodes.some(s => s.id === targetNodeId);
+      const isTargetConditional = conditionalNodes.some(c => c.id === targetNodeId);
+      
+      if (isTargetStep) {
+        // Direct connection to another step - include in static tour
+        console.log(`🔗 Direct step connection: ${currentNodeId} -> ${targetNodeId}`);
+        queue.push(targetNodeId);
+      } else if (isTargetConditional) {
+        // Connection to conditional node - DON'T follow its routing for static tour
+        // The conditional targets will be handled dynamically at runtime
+        console.log(`🔀 Conditional connection found: ${currentNodeId} -> ${targetNodeId} (not following for static tour)`);
+      }
+      // Note: We don't follow question nodes in this traversal since they don't route to other steps
+    }
+  }
+  
+  const staticStepNodesList = stepNodes.filter(step => staticSteps.has(step.id));
+  console.log('📋 Static tour steps (excluding conditional targets):', staticStepNodesList.map(s => `${s.id} (stepId: ${s.data?.stepId || 'none'})`));
+  
+  return staticStepNodesList;
+};
+
+export const convertDatabaseToTourSteps = async (): Promise<{
+  steps: TourStep[];
+  conditionalNodes: any[];
+}> => {
   try {
     console.log('Starting conversion of database to tour steps...');
     const data = await getDecisionTree();
@@ -133,10 +232,16 @@ export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
     // Group nodes by type
     const stepNodes = data.nodes.filter((node: any) => node.type === 'tourStep');
     const questionNodes = data.nodes.filter((node: any) => node.type === 'question');
+    const conditionalNodes = data.nodes.filter((node: any) => node.type === 'conditional');
+    
+    // Find root node
+    const rootNode = stepNodes.find((node: any) => node.data?.isRoot === true || node.isRoot === true);
+    console.log('Root node found:', rootNode ? rootNode.id : 'None');
     
     console.log('Node distribution:', { 
       stepNodes: stepNodes.length, 
-      questionNodes: questionNodes.length 
+      questionNodes: questionNodes.length,
+      conditionalNodes: conditionalNodes.length 
     });
 
     // Create adjacency maps for navigation (simplified)
@@ -197,11 +302,52 @@ export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
             return tourQuestion;
           });
 
+        // Check if this is the root node
+        const isRoot = nodeData.isRoot === true || node.isRoot === true;
+        
+        // Find next step connections
+        const nextStepConnections = connectedEdges
+          .filter((edge: any) => stepNodes.some((s: any) => s.id === edge.target))
+          .map((edge: any) => edge.target);
+        
+        // Find conditional connections
+        const conditionalConnections = connectedEdges
+          .filter((edge: any) => conditionalNodes.some((c: any) => c.id === edge.target));
+        
+        const conditionalRouting: ConditionalRouting[] = [];
+        conditionalConnections.forEach((edge: any) => {
+          const conditionalNode = conditionalNodes.find((c: any) => c.id === edge.target);
+          if (conditionalNode?.data?.conditions) {
+            conditionalNode.data.conditions.forEach((condition: any) => {
+              // Find the target step node to get its correct step ID
+              const targetStepNode = stepNodes.find((s: any) => s.id === condition.targetNodeId);
+              const targetStepId = targetStepNode?.data?.stepId || condition.targetNodeId;
+              
+              console.log(`🔗 Conditional routing: ${condition.condition.questionId} ${condition.condition.operator} ${condition.condition.value} -> ${condition.targetNodeId} (stepId: ${targetStepId})`);
+              
+              conditionalRouting.push({
+                questionId: condition.condition.questionId,
+                operator: condition.condition.operator,
+                value: condition.condition.value,
+                targetStepId: targetStepId,
+                description: condition.description
+              });
+            });
+          }
+        });
+
         return {
           id: nodeData.stepId || node.id,
           title: nodeData.title || `Step ${stepIndex + 1}`,
           description: nodeData.description || 'Please complete the questions below.',
           questions: connectedQuestions,
+          isRoot,
+          nextStepId: nextStepConnections[0] || undefined,
+          conditionalRouting: conditionalRouting.length > 0 ? conditionalRouting : undefined,
+          target: nodeData.target,
+          placement: nodeData.placement,
+          disableBeacon: nodeData.disableBeacon,
+          showSkipButton: nodeData.showSkipButton
         };
       } else if (node.type === 'question') {
         // Convert standalone question to a step
@@ -235,15 +381,79 @@ export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
     // Process nodes in a specific order to avoid duplicates
     let stepIndex = 0;
     
-    // First, process all tour step nodes (they become the main tour steps)
-    console.log('🔄 Processing tour step nodes...');
-    for (const stepNode of stepNodes) {
-      if (!processedNodes.has(stepNode.id)) {
-        const tourStep = processNode(stepNode, stepIndex);
+    // Only process nodes that are reachable from the root node
+    console.log('🔄 Processing reachable tour step nodes from root...');
+    
+    if (!rootNode) {
+      console.warn('⚠️ No root node found - processing all step nodes as fallback');
+      // Fallback: process all step nodes if no root is found
+      for (const stepNode of stepNodes) {
+        if (!processedNodes.has(stepNode.id)) {
+          const tourStep = processNode(stepNode, stepIndex);
+          if (tourStep) {
+            console.log(`📝 Created tour step: ${tourStep.title} with ${tourStep.questions.length} questions`);
+            tourSteps.push(tourStep);
+            stepIndex++;
+          }
+        }
+      }
+    } else {
+      // Root-based traversal: only include static tour steps (not conditional targets)
+      const staticStepNodes = findStaticTourStepNodes(rootNode, stepNodes, conditionalNodes, data.edges);
+      console.log(`📊 Found ${staticStepNodes.length} static step nodes from root`);
+      
+      // Process root node first
+      if (!processedNodes.has(rootNode.id)) {
+        const tourStep = processNode(rootNode, stepIndex);
         if (tourStep) {
-          console.log(`📝 Created tour step: ${tourStep.title} with ${tourStep.questions.length} questions`);
+          console.log(`📝 Created ROOT tour step: ${tourStep.title} with ${tourStep.questions.length} questions`);
           tourSteps.push(tourStep);
           stepIndex++;
+        }
+      }
+      
+      // Then process other static step nodes (directly connected, not through conditionals)
+      for (const stepNode of staticStepNodes) {
+        if (!processedNodes.has(stepNode.id)) {
+          const tourStep = processNode(stepNode, stepIndex);
+          if (tourStep) {
+            console.log(`📝 Created static tour step: ${tourStep.title} with ${tourStep.questions.length} questions`);
+            tourSteps.push(tourStep);
+            stepIndex++;
+          }
+        }
+      }
+      
+      // Also create tour steps for conditional targets, but mark them as conditional-only
+      // These will be used for dynamic routing but not included in the main tour sequence
+      const conditionalTargets = new Set<string>();
+      conditionalNodes.forEach(conditionalNode => {
+        if (conditionalNode.data?.conditions) {
+          conditionalNode.data.conditions.forEach((condition: any) => {
+            const targetId = condition.targetNodeId;
+            if (targetId && stepNodes.some(s => s.id === targetId)) {
+              conditionalTargets.add(targetId);
+            }
+          });
+        }
+      });
+      
+      console.log(`📊 Found ${conditionalTargets.size} conditional target steps`);
+      
+      // Process conditional target steps (these won't be in the main sequence but available for routing)
+      for (const targetId of conditionalTargets) {
+        if (!processedNodes.has(targetId)) {
+          const stepNode = stepNodes.find(s => s.id === targetId);
+          if (stepNode) {
+            const tourStep = processNode(stepNode, stepIndex);
+            if (tourStep) {
+              // Mark this as a conditional-only step
+              tourStep.isConditionalOnly = true;
+              console.log(`📝 Created conditional target step: ${tourStep.title} (conditional-only)`);
+              tourSteps.push(tourStep);
+              stepIndex++;
+            }
+          }
         }
       }
     }
@@ -284,7 +494,16 @@ export const convertDatabaseToTourSteps = async (): Promise<TourStep[]> => {
       throw new Error('No tour steps could be generated from the decision tree. Please ensure you have nodes in your decision tree.');
     }
 
-    return tourSteps;
+    // Extract conditional node data
+    const conditionalData = conditionalNodes.map(node => ({
+      id: node.id,
+      ...node.data
+    }));
+
+    return {
+      steps: tourSteps,
+      conditionalNodes: conditionalData
+    };
   } catch (error) {
     console.error('Failed to convert database to tour steps:', error);
     throw error;

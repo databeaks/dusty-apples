@@ -34,18 +34,26 @@ import {
   deleteNode, 
   createEdge, 
   deleteEdge,
+  setRootNode,
+  validateTreeConnectivity,
   DecisionTreeNode,
   DecisionTreeEdge 
 } from '@/lib/fastapi';
+import { ConditionalNode } from './conditionalNode';
+import { ConditionalNodeEditor } from './conditionalNodeEditor';
+import { RootNodeManager } from './rootNodeManager';
+import { ConditionalNodeData, RootValidationResult } from '@/types/api';
+import { validateConnection } from '@/lib/conditionalNavigation';
 
-import { Plus, Save, Trash2, Edit3, GitBranch, MessageSquare, Layout, Link, X } from 'lucide-react';
+import { Plus, Save, Trash2, Edit3, GitBranch, MessageSquare, Layout, Link, X, Crown, AlertTriangle, CheckCircle } from 'lucide-react';
 import ELK from 'elkjs/lib/elk.bundled.js';
 
 // Custom node types for different tour elements
-const TourStepNode = ({ data, id }: { data: any; id: string }) => {
+const TourStepNode = ({ data, id, isConnectable }: { data: any; id: string; isConnectable?: boolean }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(data);
   const { setNodes, getNodes } = useReactFlow();
+  const isRoot = data.isRoot === true;
 
   const handleSave = async () => {
     try {
@@ -90,15 +98,6 @@ const TourStepNode = ({ data, id }: { data: any; id: string }) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
-            <Label htmlFor="stepId">Step ID</Label>
-            <Input
-              id="stepId"
-              value={editData.stepId || ''}
-              onChange={(e) => setEditData({ ...editData, stepId: e.target.value })}
-              placeholder="e.g., customer-type"
-            />
-          </div>
           <div>
             <Label htmlFor="title">Title</Label>
             <Input
@@ -162,22 +161,44 @@ const TourStepNode = ({ data, id }: { data: any; id: string }) => {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="showSkipButton">Show Skip Button</Label>
-              <Select 
-                value={editData.showSkipButton ? 'true' : 'false'} 
-                onValueChange={(value) => setEditData({ ...editData, showSkipButton: value === 'true' })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">Show Skip</SelectItem>
-                  <SelectItem value="false">Hide Skip</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                      <div>
+            <Label htmlFor="showSkipButton">Show Skip Button</Label>
+            <Select 
+              value={editData.showSkipButton ? 'true' : 'false'} 
+              onValueChange={(value) => setEditData({ ...editData, showSkipButton: value === 'true' })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="true">Show Skip</SelectItem>
+                <SelectItem value="false">Hide Skip</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+        </div>
+        
+        {/* Root Node Setting */}
+        <div>
+          <Label htmlFor="isRoot">Root Node</Label>
+          <Select 
+            value={editData.isRoot ? 'true' : 'false'} 
+            onValueChange={(value) => setEditData({ ...editData, isRoot: value === 'true' })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="false">Regular Step</SelectItem>
+              <SelectItem value="true">🔴 Root Node (Tour Start)</SelectItem>
+            </SelectContent>
+          </Select>
+          {editData.isRoot && (
+            <div className="mt-1 text-xs text-orange-600 bg-orange-50 p-2 rounded border">
+              ⚠️ Only one root node allowed per tour. Setting this as root will remove root status from other nodes.
+            </div>
+          )}
+        </div>
           
           <div className="flex space-x-2">
             <Button size="sm" onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
@@ -196,12 +217,19 @@ const TourStepNode = ({ data, id }: { data: any; id: string }) => {
   }
 
   return (
-    <Card className="min-w-[260px] max-w-[280px] border-2 border-blue-200 bg-blue-50/30 shadow-lg">
-      <CardHeader className="pb-2 bg-blue-100">
+    <Card className={`min-w-[260px] max-w-[280px] border-2 shadow-lg ${
+      isRoot 
+        ? 'border-red-500 bg-red-50/30 ring-2 ring-red-200' 
+        : 'border-blue-200 bg-blue-50/30'
+    }`}>
+      <CardHeader className={`pb-2 ${isRoot ? 'bg-red-100' : 'bg-blue-100'}`}>
         <div className="flex justify-between items-start">
           <div className="flex items-center space-x-2">
-            <MessageSquare className="h-4 w-4 text-blue-600" />
-            <CardTitle className="text-sm text-blue-800">{data.title || 'Untitled Step'}</CardTitle>
+            {isRoot && <Crown className="h-4 w-4 text-red-600" />}
+            <MessageSquare className={`h-4 w-4 ${isRoot ? 'text-red-600' : 'text-blue-600'}`} />
+            <CardTitle className={`text-sm ${isRoot ? 'text-red-800' : 'text-blue-800'}`}>
+              {isRoot && '👑 '}{data.title || 'Untitled Step'}
+            </CardTitle>
           </div>
           <div className="flex space-x-1">
             <Button size="sm" variant="ghost" onClick={() => setIsEditing(true)}>
@@ -214,21 +242,29 @@ const TourStepNode = ({ data, id }: { data: any; id: string }) => {
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-xs text-blue-700 mb-2">{data.description || 'No description'}</p>
-        <div className="text-xs text-blue-600">
+        <p className={`text-xs mb-2 ${isRoot ? 'text-red-700' : 'text-blue-700'}`}>
+          {data.description || 'No description'}
+        </p>
+        <div className={`text-xs ${isRoot ? 'text-red-600' : 'text-blue-600'}`}>
           <strong>ID:</strong> {data.stepId || 'No ID'}
         </div>
+        {isRoot && (
+          <div className="mt-1 text-xs text-red-600 font-medium">
+            <Crown className="h-3 w-3 inline mr-1" />
+            <strong>ROOT NODE</strong> - Tour starts here
+          </div>
+        )}
         {data.target && (
-          <div className="mt-1 text-xs text-blue-600">
+          <div className={`mt-1 text-xs ${isRoot ? 'text-red-600' : 'text-blue-600'}`}>
             <strong>Target:</strong> 
-            <code className="bg-blue-100 px-1 py-0.5 rounded text-xs ml-1">
+            <code className={`${isRoot ? 'bg-red-100' : 'bg-blue-100'} px-1 py-0.5 rounded text-xs ml-1`}>
               {data.target.length > 15 ? `${data.target.substring(0, 15)}...` : data.target}
             </code>
           </div>
         )}
         {/* Show compact summary of configuration */}
         {(data.placement || data.disableBeacon || data.showSkipButton) && (
-          <div className="mt-1 text-xs text-blue-600">
+          <div className={`mt-1 text-xs ${isRoot ? 'text-red-600' : 'text-blue-600'}`}>
             <strong>Config:</strong> 
             {data.placement && ` ${data.placement}`}
             {data.disableBeacon && ' • No Beacon'}
@@ -239,14 +275,22 @@ const TourStepNode = ({ data, id }: { data: any; id: string }) => {
       <Handle 
         type="target" 
         position={Position.Left} 
-        className="w-3 h-3 bg-blue-500 border-2 border-white shadow-lg hover:bg-blue-600 transition-colors" 
-        title="Connect from another node to this step"
+        className={`w-3 h-3 border-2 border-white shadow-lg transition-colors ${
+          isRoot 
+            ? 'bg-red-500 hover:bg-red-600' 
+            : 'bg-blue-500 hover:bg-blue-600'
+        }`}
+        title={isRoot ? "Connect from another node to this ROOT step" : "Connect from another node to this step"}
       />
       <Handle 
         type="source" 
         position={Position.Right} 
-        className="w-3 h-3 bg-blue-500 border-2 border-white shadow-lg hover:bg-blue-600 transition-colors" 
-        title="Connect this step to another node"
+        className={`w-3 h-3 border-2 border-white shadow-lg transition-colors ${
+          isRoot 
+            ? 'bg-red-500 hover:bg-red-600' 
+            : 'bg-blue-500 hover:bg-blue-600'
+        }`}
+        title={isRoot ? "Connect this ROOT step to another node" : "Connect this step to another node"}
       />
     </Card>
   );
@@ -300,15 +344,6 @@ const QuestionNode = ({ data, id }: { data: any; id: string }) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div>
-            <Label htmlFor="questionId">Question ID</Label>
-            <Input
-              id="questionId"
-              value={editData.questionId || ''}
-              onChange={(e) => setEditData({ ...editData, questionId: e.target.value })}
-              placeholder="e.g., customer-type"
-            />
-          </div>
           <div>
             <Label htmlFor="title">Question Title</Label>
             <Input
@@ -460,10 +495,7 @@ const QuestionNode = ({ data, id }: { data: any; id: string }) => {
 
 
 
-const nodeTypes: NodeTypes = {
-  tourStep: TourStepNode,
-  question: QuestionNode,
-};
+// We'll define nodeTypes inside the component to access the edit handler
 
 // ELK layout configuration
 const elk = new ELK();
@@ -894,8 +926,22 @@ export function DecisionTree() {
   const [error, setError] = useState<string | null>(null);
   const [connectionFeedback, setConnectionFeedback] = useState<string | null>(null);
   const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
+  const [editingConditionalNode, setEditingConditionalNode] = useState<{ id: string; data: ConditionalNodeData } | null>(null);
   const router = useRouter();
 
+  // Define node types with access to handlers
+  const nodeTypes: NodeTypes = {
+    tourStep: TourStepNode,
+    question: QuestionNode,
+    conditional: (props: any) => (
+      <ConditionalNode 
+        {...props} 
+        onEdit={(id: string, data: ConditionalNodeData) => {
+          setEditingConditionalNode({ id, data });
+        }}
+      />
+    ),
+  };
 
   // Load data from database and apply ELK layout
   const loadDatabaseData = useCallback(async () => {
@@ -1041,20 +1087,22 @@ export function DecisionTree() {
       // Clear any previous feedback
       setConnectionFeedback(null);
 
-      // Prevent self-connections
-      if (connection.source === connection.target) {
-        setConnectionFeedback('❌ Cannot connect a node to itself');
-        setTimeout(() => setConnectionFeedback(null), 3000);
+      // Validate connection using connectivity rules
+      const validation = validateConnection(
+        { source: connection.source, target: connection.target },
+        nodes,
+        edges
+      );
+
+      if (!validation.isValid) {
+        setConnectionFeedback(`❌ ${validation.errors.join(', ')}`);
+        setTimeout(() => setConnectionFeedback(null), 5000);
         return;
       }
 
-      // Check if connection already exists
-      const existingEdge = edges.find(
-        edge => edge.source === connection.source && edge.target === connection.target
-      );
-      if (existingEdge) {
-        setConnectionFeedback('⚠️ Connection already exists between these nodes');
-        setTimeout(() => setConnectionFeedback(null), 3000);
+      if (validation.warnings.length > 0) {
+        setConnectionFeedback(`⚠️ ${validation.warnings.join(', ')}`);
+        setTimeout(() => setConnectionFeedback(null), 4000);
         return;
       }
 
@@ -1183,7 +1231,7 @@ export function DecisionTree() {
       type: 'tourStep',
       position: { x: newStepX, y: stepY },
       data: { 
-        stepId: 'new-step',
+        stepId: `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         title: 'New Tour Step', 
         description: 'Add description here',
         questions: []
@@ -1220,12 +1268,13 @@ export function DecisionTree() {
       newQuestionX = rightmostQuestion.position.x + questionSpacing;
     }
 
+    const uniqueId = `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newNode: Node = {
       id: `question-new-${Date.now()}`,
       type: 'question',
       position: { x: newQuestionX, y: questionY },
       data: { 
-        questionId: 'new-question',
+        questionId: uniqueId,
         title: 'New Question', 
         description: 'Add question description',
         type: 'select',
@@ -1246,6 +1295,109 @@ export function DecisionTree() {
     }
     
     setNodes((nds) => [...nds, newNode]);
+  };
+
+  const addNewConditionalNode = async () => {
+    // Calculate position for new conditional node to avoid overlaps
+    const existingConditionals = nodes.filter(node => node.type === 'conditional');
+    const conditionalSpacing = 350;
+    const conditionalY = 250;
+    
+    let newConditionalX = 600; // Default starting position
+    if (existingConditionals.length > 0) {
+      // Find the rightmost conditional and place new one to the right
+      const rightmostConditional = existingConditionals.reduce((rightmost, current) => 
+        current.position.x > rightmost.position.x ? current : rightmost
+      );
+      newConditionalX = rightmostConditional.position.x + conditionalSpacing;
+    }
+
+    const conditionalData: ConditionalNodeData = {
+      title: 'New Conditional Router',
+      description: 'Routes users based on their answers',
+      conditions: [],
+      defaultTarget: undefined
+    };
+
+    const newNode: Node = {
+      id: `conditional-new-${Date.now()}`,
+      type: 'conditional',
+      position: { x: newConditionalX, y: conditionalY },
+      data: conditionalData as Record<string, unknown>,
+    };
+
+    try {
+      const decisionTreeNode: DecisionTreeNode = {
+        id: newNode.id,
+        type: newNode.type || 'conditional',
+        position: newNode.position,
+        data: newNode.data,
+      };
+      await createNode(decisionTreeNode);
+    } catch (error) {
+      console.error('Failed to create conditional node:', error);
+    }
+    
+    setNodes((nds) => [...nds, newNode]);
+    
+    // Open editor for the new conditional node
+    setEditingConditionalNode({ id: newNode.id, data: conditionalData });
+  };
+
+  const handleSaveConditionalNode = async (nodeId: string, data: ConditionalNodeData) => {
+    try {
+      // Get the current node to preserve position
+      const currentNode = nodes.find(n => n.id === nodeId);
+      if (!currentNode) return;
+      
+      // Send complete node data including position
+      await updateNode(nodeId, {
+        type: currentNode.type,
+        position: currentNode.position,
+        data: data
+      });
+      
+      setNodes((nodes) =>
+        nodes.map((node) =>
+          node.id === nodeId ? { ...node, data: data as Record<string, unknown> } : node
+        )
+      );
+    } catch (error) {
+      console.error('Failed to update conditional node:', error);
+    }
+  };
+
+  // Root node management functions
+  const handleSetRoot = async (nodeId: string) => {
+    try {
+      await setRootNode(nodeId);
+      
+      // Update the local state to reflect the root change
+      setNodes((nodes) =>
+        nodes.map((node) => ({
+          ...node,
+          data: { ...node.data, isRoot: node.id === nodeId },
+          isRoot: node.id === nodeId
+        }))
+      );
+      
+      setConnectionFeedback(`✅ Root node set to: ${nodes.find(n => n.id === nodeId)?.data?.title || nodeId}`);
+      setTimeout(() => setConnectionFeedback(null), 3000);
+    } catch (error) {
+      console.error('Failed to set root node:', error);
+      setConnectionFeedback('❌ Failed to set root node');
+      setTimeout(() => setConnectionFeedback(null), 3000);
+    }
+  };
+
+  const handleValidateConnectivity = async (): Promise<RootValidationResult> => {
+    try {
+      const result = await validateTreeConnectivity();
+      return result;
+    } catch (error) {
+      console.error('Failed to validate connectivity:', error);
+      throw error;
+    }
   };
 
   if (isLoading) {
@@ -1298,6 +1450,14 @@ export function DecisionTree() {
         <Controls key="controls" />
         <MiniMap key="minimap" />
         <Panel key="panel-left" position="top-left" className="space-y-2">
+          {/* Root Node Management Panel */}
+          <RootNodeManager
+            nodes={nodes}
+            edges={edges}
+            onSetRoot={handleSetRoot}
+            onValidateConnectivity={handleValidateConnectivity}
+          />
+          
           <div className="bg-white p-3 rounded-lg shadow-lg border">
             <div className="text-xs font-medium text-gray-700 mb-2">
               Layout & Connections
@@ -1382,6 +1542,10 @@ export function DecisionTree() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Question
               </Button>
+              <Button onClick={addNewConditionalNode} className="shadow-lg bg-orange-600 hover:bg-orange-700 w-full">
+                <GitBranch className="h-4 w-4 mr-2" />
+                Add Conditional
+              </Button>
             </div>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-lg border">
@@ -1414,6 +1578,21 @@ export function DecisionTree() {
           </div>
         </Panel>
       </ReactFlow>
+      
+      {/* Conditional Node Editor Modal */}
+      {editingConditionalNode && (
+        <ConditionalNodeEditor
+          data={editingConditionalNode.data}
+          nodeId={editingConditionalNode.id}
+          nodes={nodes}
+          edges={edges}
+          onSave={(data) => {
+            handleSaveConditionalNode(editingConditionalNode.id, data);
+            setEditingConditionalNode(null);
+          }}
+          onClose={() => setEditingConditionalNode(null)}
+        />
+      )}
     </div>
   );
 } 

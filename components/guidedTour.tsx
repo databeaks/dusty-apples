@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store/appStore';
 import { guidedTourSteps, FormQuestion, FormStep, getRecommendation, DeploymentRecommendation } from '@/lib/data/sampleData';
 import { convertDatabaseToTourSteps, TourStep, TourQuestion } from '@/lib/fastapi';
+import { TourNavigator } from '@/lib/conditionalNavigation';
+import { ConditionalNodeData } from '@/types/api';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -159,9 +161,16 @@ export function GuidedTour() {
     resetGuidedTour,
     useDatabaseTour,
     databaseTourSteps,
+    databaseConditionalNodes,
     isLoadingDatabaseTour,
     setUseDatabaseTour,
     loadDatabaseTourSteps,
+    getMainTourSteps,
+    navigateToNextStep,
+    navigateToPreviousStep,
+    getCurrentStep,
+    initializeTourFromRoot,
+    currentStepPath,
   } = useAppStore();
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -169,8 +178,15 @@ export function GuidedTour() {
   
   // Get applicable steps based on current answers and tour mode
   const getApplicableSteps = () => {
-    const steps = useDatabaseTour ? databaseTourSteps : guidedTourSteps;
-    return steps.filter(step => !step.condition || step.condition(formAnswers));
+    if (useDatabaseTour) {
+      // For database tours, only show main tour steps (exclude conditional-only steps)
+      const mainSteps = getMainTourSteps();
+      console.log('🎯 Main tour steps for UI:', mainSteps.map(s => s.id));
+      return mainSteps.filter(step => !step.condition || step.condition(formAnswers));
+    } else {
+      // For sample tours, use the original logic
+      return guidedTourSteps.filter(step => !step.condition || step.condition(formAnswers));
+    }
   };
 
   const applicableSteps = getApplicableSteps();
@@ -182,9 +198,19 @@ export function GuidedTour() {
       loadDatabaseTourSteps();
     }
   }, [useDatabaseTour, databaseTourSteps.length, isLoadingDatabaseTour]);
-  const currentStep = applicableSteps[currentStepIndex];
-  const isLastStep = currentStepIndex === applicableSteps.length - 1;
-  const isFirstStep = currentStepIndex === 0;
+  
+  // Initialize root-based tour when database tour steps are loaded
+  useEffect(() => {
+    if (useDatabaseTour && databaseTourSteps.length > 0 && currentStepPath.length === 0) {
+      console.log('🚀 Initializing root-based tour...');
+      initializeTourFromRoot().catch(console.error);
+    }
+  }, [useDatabaseTour, databaseTourSteps.length, currentStepPath.length]);
+  
+  // Get current step based on tour mode
+  const currentStep = useDatabaseTour ? getCurrentStep() : applicableSteps[currentStepIndex];
+  const isLastStep = useDatabaseTour ? false : currentStepIndex === applicableSteps.length - 1; // For database tours, we don't know if it's the last step
+  const isFirstStep = useDatabaseTour ? currentStepPath.length <= 1 : currentStepIndex === 0;
 
   // Check if a question should be shown based on conditional logic
   const shouldShowQuestion = (question: FormQuestion): boolean => {
@@ -234,10 +260,26 @@ export function GuidedTour() {
         // Complete the tour
         handleComplete();
       } else {
-        // For database tour, simply go to next step in the array
         if (useDatabaseTour) {
-          nextStep();
-          setValidationErrors([]);
+          // For database tour, use root-based navigation
+          console.log('🔄 Database tour: navigating to next step...');
+          const nextStepId = navigateToNextStep();
+          
+          if (nextStepId) {
+            console.log('✅ Navigated to step:', nextStepId);
+            setValidationErrors([]);
+          } else {
+            // Check if current step has conditional routing - if so, user needs to answer questions
+            const currentStep = getCurrentStep();
+            if (currentStep?.conditionalRouting && currentStep.conditionalRouting.length > 0) {
+              console.log('⏳ Staying on current step - user needs to answer questions');
+              // Don't complete the tour, just stay on current step
+              // The user needs to answer the questions to proceed
+            } else {
+              console.log('🏁 No next step available - tour complete');
+              handleComplete();
+            }
+          }
         } else {
           // For static tour, use the conditional logic
           const allSteps = guidedTourSteps;
@@ -266,10 +308,17 @@ export function GuidedTour() {
   };
 
   const handlePrevious = () => {
-    // For database tour, simply go to previous step in the array
+    // For database tour, use root-based navigation
     if (useDatabaseTour) {
-      previousStep();
-      setValidationErrors([]);
+      console.log('🔄 Database tour: navigating to previous step...');
+      const previousStepId = navigateToPreviousStep();
+      
+      if (previousStepId) {
+        console.log('✅ Navigated back to step:', previousStepId);
+        setValidationErrors([]);
+      } else {
+        console.log('🚫 Already at first step');
+      }
     } else {
       // For static tour, use the conditional logic
       const allSteps = guidedTourSteps;
