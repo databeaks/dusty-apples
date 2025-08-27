@@ -1,5 +1,15 @@
 // lib/api.ts
 import axios from "axios";
+import {
+  DecisionTreeMetadata,
+  DecisionTreeCreateRequest,
+  DecisionTreeUpdateRequest,
+  DecisionTreeDuplicateRequest,
+  DecisionTreeListResponse,
+  DecisionTreeResponse,
+  DecisionTreeExportData,
+  DefaultTourTreeResponse
+} from '@/types/api';
 
 // Use environment variable for backend URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -65,8 +75,9 @@ export const getDecisionTree = async (): Promise<DecisionTree> => {
 };
 
 // Create a new node
-export const createNode = async (node: DecisionTreeNode) => {
-  const response = await api.post("/decision-tree/nodes", node);
+export const createNode = async (node: DecisionTreeNode, treeId?: string) => {
+  const url = treeId ? `/decision-tree/nodes?tree_id=${treeId}` : "/decision-tree/nodes";
+  const response = await api.post(url, node);
   return response.data;
 };
 
@@ -105,8 +116,9 @@ export const getRootNode = async () => {
   return response.data;
 };
 
-export const validateTreeConnectivity = async () => {
-  const response = await api.get('/decision-tree/validate-connectivity');
+export const validateTreeConnectivity = async (treeId?: string) => {
+  const url = treeId ? `/decision-tree/validate-connectivity?tree_id=${treeId}` : '/decision-tree/validate-connectivity';
+  const response = await api.get(url);
   return response.data;
 };
 
@@ -218,7 +230,18 @@ export const convertDatabaseToTourSteps = async (): Promise<{
 }> => {
   try {
     console.log('Starting conversion of database to tour steps...');
-    const data = await getDecisionTree();
+    
+    // Get the default tour tree
+    const defaultTreeResponse = await getDefaultTourTree();
+    if (!defaultTreeResponse.default_tree) {
+      throw new Error('No default decision tree set for guided tours. Please set a default tree first.');
+    }
+    
+    console.log('Using default tour tree:', defaultTreeResponse.default_tree.name);
+    
+    // Get the specific decision tree data
+    const treeResponse = await getDecisionTreeById(defaultTreeResponse.default_tree.id);
+    const data = { nodes: treeResponse.nodes, edges: treeResponse.edges };
     
     if (!data || !data.nodes || !data.edges) {
       throw new Error('Invalid decision tree data');
@@ -508,4 +531,50 @@ export const convertDatabaseToTourSteps = async (): Promise<{
     console.error('Failed to convert database to tour steps:', error);
     throw error;
   }
+};
+
+// Decision Tree Management API functions
+export const listDecisionTrees = async (): Promise<DecisionTreeListResponse> => {
+  const response = await api.get("/decision-trees/");
+  return response.data;
+};
+
+export const createDecisionTree = async (data: DecisionTreeCreateRequest): Promise<{ id: string; message: string }> => {
+  const response = await api.post("/decision-trees/", data);
+  return response.data;
+};
+
+export const getDecisionTreeById = async (treeId: string): Promise<DecisionTreeResponse> => {
+  const response = await api.get(`/decision-trees/${treeId}`);
+  return response.data;
+};
+
+export const updateDecisionTreeMetadata = async (treeId: string, data: DecisionTreeUpdateRequest): Promise<{ message: string }> => {
+  const response = await api.put(`/decision-trees/${treeId}`, data);
+  return response.data;
+};
+
+export const deleteDecisionTree = async (treeId: string): Promise<{ message: string }> => {
+  const response = await api.delete(`/decision-trees/${treeId}`);
+  return response.data;
+};
+
+export const duplicateDecisionTree = async (treeId: string, data: DecisionTreeDuplicateRequest): Promise<{ id: string; message: string; original_id: string }> => {
+  const response = await api.post(`/decision-trees/${treeId}/duplicate`, data);
+  return response.data;
+};
+
+export const exportDecisionTree = async (treeId: string): Promise<DecisionTreeExportData> => {
+  const response = await api.get(`/decision-trees/${treeId}/export`);
+  return response.data;
+};
+
+export const getDefaultTourTree = async (): Promise<DefaultTourTreeResponse> => {
+  const response = await api.get("/decision-trees/default-for-tour");
+  return response.data;
+};
+
+export const setDefaultTourTree = async (treeId: string): Promise<{ message: string; tree_id: string }> => {
+  const response = await api.post(`/decision-trees/${treeId}/set-default-for-tour`);
+  return response.data;
 };

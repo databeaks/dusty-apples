@@ -1,0 +1,6 @@
+---
+description: Guidelines for running python commands in the terminal
+globs:
+alwaysApply: true
+---
+- Use the environment dbx-apps when executing python commands. Activate this by running 'conda activate dbx-apps'

@@ -9,16 +9,31 @@ router = APIRouter(prefix="/api/decision-tree", tags=["decision-tree"])
 
 @router.get("/")
 async def get_decision_tree():
-    """Get the complete decision tree (nodes and edges)"""
+    """Get the complete decision tree (nodes and edges) - Uses default tour tree for backward compatibility"""
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Get nodes
-            cur.execute("SELECT * FROM decision_tree_nodes ORDER BY created_at")
+            # Find the default tour tree or fall back to the first available tree
+            cur.execute("SELECT id FROM decision_trees WHERE is_default_for_tour = TRUE LIMIT 1")
+            default_tree = cur.fetchone()
+            
+            if not default_tree:
+                # Fallback: use the first available tree
+                cur.execute("SELECT id FROM decision_trees ORDER BY created_at LIMIT 1")
+                default_tree = cur.fetchone()
+            
+            if not default_tree:
+                # No trees available
+                return {"nodes": [], "edges": []}
+            
+            tree_id = default_tree["id"]
+            
+            # Get nodes for the specific tree
+            cur.execute("SELECT * FROM decision_tree_nodes WHERE tree_id = %s ORDER BY created_at", (tree_id,))
             nodes = cur.fetchall()
             
-            # Get edges
-            cur.execute("SELECT * FROM decision_tree_edges ORDER BY created_at")
+            # Get edges for the specific tree
+            cur.execute("SELECT * FROM decision_tree_edges WHERE tree_id = %s ORDER BY created_at", (tree_id,))
             edges = cur.fetchall()
             
             # Convert to ReactFlow format
@@ -66,25 +81,48 @@ async def get_decision_tree_no_slash():
     return await get_decision_tree()
 
 @router.post("/nodes")
-async def create_node(request: Request):
+async def create_node(request: Request, tree_id: str = None):
     """Create a new decision tree node"""
     try:
         body = await request.json()
         
-        # Validate root node constraints
-        if body.get("isRoot") or (body.get("data", {}).get("isRoot")):
-            validate_root_node_constraints({"is_root": True, "id": body["id"]})
-        
         conn = get_db_connection()
         
         with conn.cursor() as cur:
+            # Use provided tree_id, or fall back to default tree selection
+            if tree_id:
+                # Verify the tree exists
+                cur.execute("SELECT id FROM decision_trees WHERE id = %s", (tree_id,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail=f"Decision tree {tree_id} not found")
+                target_tree_id = tree_id
+            else:
+                # Original logic: find the default tour tree or fall back to the first available tree
+                cur.execute("SELECT id FROM decision_trees WHERE is_default_for_tour = TRUE LIMIT 1")
+                default_tree = cur.fetchone()
+                
+                if not default_tree:
+                    # Fallback: use the first available tree
+                    cur.execute("SELECT id FROM decision_trees ORDER BY created_at LIMIT 1")
+                    default_tree = cur.fetchone()
+                
+                if not default_tree:
+                    raise HTTPException(status_code=400, detail="No decision trees available. Please create a decision tree first.")
+                
+                target_tree_id = default_tree[0]
+            
+            # Validate root node constraints for the specific tree
+            if body.get("isRoot") or (body.get("data", {}).get("isRoot")):
+                validate_root_node_constraints({"is_root": True, "id": body["id"]}, target_tree_id)
+            
             is_root = body.get("isRoot", False) or body.get("data", {}).get("isRoot", False)
             cur.execute("""
-                INSERT INTO decision_tree_nodes (node_id, type, position_x, position_y, data, is_root)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO decision_tree_nodes (node_id, tree_id, type, position_x, position_y, data, is_root)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
                 body["id"],
+                target_tree_id,
                 body["type"],
                 body["position"]["x"],
                 body["position"]["y"],
@@ -94,6 +132,8 @@ async def create_node(request: Request):
             
             conn.commit()
             return {"message": "Node created successfully", "id": body["id"]}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create node: {e}")
         raise HTTPException(status_code=500, detail="Failed to create node")
@@ -106,14 +146,22 @@ async def update_node(node_id: str, request: Request):
     try:
         body = await request.json()
         
-        # Validate root node constraints if setting as root
-        is_root = body.get("isRoot", False) or body.get("data", {}).get("isRoot", False)
-        if is_root:
-            validate_root_node_constraints({"is_root": True, "id": node_id})
-        
         conn = get_db_connection()
         
         with conn.cursor() as cur:
+            # Get the tree_id for this node first
+            cur.execute("SELECT tree_id FROM decision_tree_nodes WHERE node_id = %s", (node_id,))
+            node_result = cur.fetchone()
+            if not node_result:
+                raise HTTPException(status_code=404, detail="Node not found")
+            
+            tree_id = node_result[0]
+            
+            # Validate root node constraints if setting as root
+            is_root = body.get("isRoot", False) or body.get("data", {}).get("isRoot", False)
+            if is_root:
+                validate_root_node_constraints({"is_root": True, "id": node_id}, tree_id)
+            
             cur.execute("""
                 UPDATE decision_tree_nodes 
                 SET position_x = %s, position_y = %s, data = %s, is_root = %s, updated_at = CURRENT_TIMESTAMP
@@ -164,12 +212,24 @@ async def create_edge(request: Request):
         conn = get_db_connection()
         
         with conn.cursor() as cur:
+            # Find the tree_id by looking up one of the nodes (source node)
             cur.execute("""
-                INSERT INTO decision_tree_edges (edge_id, source, target, source_handle, target_handle, label)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                SELECT tree_id FROM decision_tree_nodes WHERE node_id = %s LIMIT 1
+            """, (body["source"],))
+            
+            node_result = cur.fetchone()
+            if not node_result:
+                raise HTTPException(status_code=400, detail=f"Source node {body['source']} not found")
+            
+            tree_id = node_result[0]
+            
+            cur.execute("""
+                INSERT INTO decision_tree_edges (edge_id, tree_id, source, target, source_handle, target_handle, label)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
                 body["id"],
+                tree_id,
                 body["source"],
                 body["target"],
                 body.get("sourceHandle"),
@@ -179,6 +239,8 @@ async def create_edge(request: Request):
             
             conn.commit()
             return {"message": "Edge created successfully", "id": body["id"]}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create edge: {e}")
         raise HTTPException(status_code=500, detail="Failed to create edge")
@@ -206,12 +268,12 @@ async def delete_edge(edge_id: str):
 
 @router.post("/nodes/{node_id}/set-root")
 async def set_root_node(node_id: str):
-    """Set a node as the root node (removes root from other nodes)"""
+    """Set a node as the root node (removes root from other nodes in the same tree)"""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # First, check if the node exists and is a tour step
-            cur.execute("SELECT type FROM decision_tree_nodes WHERE node_id = %s", (node_id,))
+            # First, check if the node exists and get its tree_id
+            cur.execute("SELECT type, tree_id FROM decision_tree_nodes WHERE node_id = %s", (node_id,))
             node = cur.fetchone()
             
             if not node:
@@ -220,17 +282,35 @@ async def set_root_node(node_id: str):
             if node[0] != 'tourStep':
                 raise HTTPException(status_code=400, detail="Only tour steps can be set as root nodes")
             
-            # Remove root flag from all other nodes
-            cur.execute("UPDATE decision_tree_nodes SET is_root = FALSE WHERE is_root = TRUE")
+            tree_id = node[1]
             
-            # Set the specified node as root
+            # Remove root flag from all nodes in the SAME TREE (including the current node if it was already root)
+            cur.execute("UPDATE decision_tree_nodes SET is_root = FALSE WHERE tree_id = %s", (tree_id,))
+            
+            # Now set the specified node as root (no constraint violation since all others are FALSE)
             cur.execute("UPDATE decision_tree_nodes SET is_root = TRUE WHERE node_id = %s", (node_id,))
             
             conn.commit()
-            return {"message": f"Node {node_id} set as root successfully"}
+            
+            # Verify the root was set correctly
+            cur.execute("SELECT node_id FROM decision_tree_nodes WHERE tree_id = %s AND is_root = TRUE", (tree_id,))
+            new_root = cur.fetchone()
+            
+            if not new_root or new_root[0] != node_id:
+                raise HTTPException(status_code=500, detail="Failed to set root node - verification failed")
+            
+            return {
+                "message": f"Node {node_id} set as root successfully",
+                "tree_id": str(tree_id),
+                "root_node_id": node_id
+            }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to set root node: {e}")
-        raise HTTPException(status_code=500, detail="Failed to set root node")
+        logger.error(f"Exception type: {type(e)}")
+        logger.error(f"Exception args: {e.args}")
+        raise HTTPException(status_code=500, detail=f"Failed to set root node: {str(e)}")
     finally:
         conn.close()
 
@@ -265,16 +345,38 @@ async def get_root_node():
         conn.close()
 
 @router.get("/validate-connectivity")
-async def validate_tree_connectivity():
+async def validate_tree_connectivity(tree_id: str = None):
     """Validate that all nodes are reachable from root"""
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Get all nodes and edges
-            cur.execute("SELECT * FROM decision_tree_nodes")
+            # Determine which tree to validate
+            if tree_id:
+                # Validate specific tree
+                cur.execute("SELECT id FROM decision_trees WHERE id = %s", (tree_id,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail=f"Decision tree {tree_id} not found")
+                target_tree_id = tree_id
+            else:
+                # Fallback to default tour tree for backward compatibility
+                cur.execute("SELECT id FROM decision_trees WHERE is_default_for_tour = TRUE LIMIT 1")
+                default_tree = cur.fetchone()
+                
+                if not default_tree:
+                    # Fallback: use the first available tree
+                    cur.execute("SELECT id FROM decision_trees ORDER BY created_at LIMIT 1")
+                    default_tree = cur.fetchone()
+                
+                if not default_tree:
+                    raise HTTPException(status_code=400, detail="No decision trees available. Please create a decision tree first.")
+                
+                target_tree_id = default_tree[0]
+            
+            # Get nodes and edges for the specific tree only
+            cur.execute("SELECT * FROM decision_tree_nodes WHERE tree_id = %s", (target_tree_id,))
             nodes = cur.fetchall()
             
-            cur.execute("SELECT * FROM decision_tree_edges")
+            cur.execute("SELECT * FROM decision_tree_edges WHERE tree_id = %s", (target_tree_id,))
             edges = cur.fetchall()
             
             # Find root node

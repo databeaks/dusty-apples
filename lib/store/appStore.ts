@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { TourStep, ConditionalRouting } from '@/lib/fastapi';
-import { ConditionalNodeData, TourFlow, RootValidationResult } from '@/types/api';
+import { ConditionalNodeData, TourFlow, RootValidationResult, DecisionTreeMetadata } from '@/types/api';
 import { RootTourNavigator } from '@/lib/conditionalNavigation';
 
 export interface FormAnswers {
@@ -9,8 +9,16 @@ export interface FormAnswers {
 
 interface AppStore {
   // Navigation state
-  currentView: 'home' | 'dashboard' | 'guided-tour';
-  setCurrentView: (view: 'home' | 'dashboard' | 'guided-tour') => void;
+  currentView: 'home' | 'dashboard' | 'guided-tour' | 'decision-tree-list' | 'decision-tree-editor';
+  setCurrentView: (view: 'home' | 'dashboard' | 'guided-tour' | 'decision-tree-list' | 'decision-tree-editor') => void;
+  
+  // Decision Tree Management state
+  currentDecisionTree: DecisionTreeMetadata | null;
+  currentDecisionTreeId: string | null;
+  decisionTreeView: 'list' | 'editor';
+  setCurrentDecisionTree: (tree: DecisionTreeMetadata | null) => void;
+  setCurrentDecisionTreeId: (id: string | null) => void;
+  setDecisionTreeView: (view: 'list' | 'editor') => void;
   
   // Guided tour state
   currentStepIndex: number;
@@ -60,6 +68,11 @@ interface AppStore {
 export const useAppStore = create<AppStore>((set, get) => ({
   // Initial state
   currentView: 'home',
+  
+  // Decision Tree Management initial state
+  currentDecisionTree: null,
+  currentDecisionTreeId: null,
+  decisionTreeView: 'list',
   currentStepIndex: 0,
   formAnswers: {},
   isGuidedTourOpen: false,
@@ -75,6 +88,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
   
   // Navigation actions
   setCurrentView: (view) => set({ currentView: view }),
+  
+  // Decision Tree Management actions
+  setCurrentDecisionTree: (tree) => set({ currentDecisionTree: tree }),
+  setCurrentDecisionTreeId: (id) => set({ currentDecisionTreeId: id }),
+  setDecisionTreeView: (view) => set({ decisionTreeView: view }),
   
   // Guided tour actions
   setCurrentStepIndex: (index) => set({ currentStepIndex: index }),

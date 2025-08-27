@@ -79,3 +79,62 @@ export interface TourConnection {
   type: 'step' | 'question' | 'conditional';
   conditions?: ConditionalRule[];
 }
+
+// Decision Tree Management Types
+export interface DecisionTreeMetadata {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  created_by: string;
+  last_edited_by: string;
+  version: number;
+  is_default_for_tour: boolean;
+  created_at: string;
+  updated_at: string;
+  node_count?: number;
+  edge_count?: number;
+}
+
+export interface DecisionTreeCreateRequest {
+  name: string;
+  description?: string;
+  tags?: string[];
+  created_by?: string;
+  last_edited_by?: string;
+}
+
+export interface DecisionTreeUpdateRequest {
+  name?: string;
+  description?: string;
+  tags?: string[];
+  last_edited_by?: string;
+  version?: number;
+}
+
+export interface DecisionTreeDuplicateRequest {
+  name?: string;
+  created_by?: string;
+  last_edited_by?: string;
+}
+
+export interface DecisionTreeListResponse {
+  trees: DecisionTreeMetadata[];
+}
+
+export interface DecisionTreeResponse {
+  tree: DecisionTreeMetadata;
+  nodes: DecisionTreeNode[];
+  edges: DecisionTreeEdge[];
+}
+
+export interface DecisionTreeExportData {
+  metadata: DecisionTreeMetadata & { exported_at: string };
+  nodes: any[];
+  edges: any[];
+}
+
+export interface DefaultTourTreeResponse {
+  default_tree: DecisionTreeMetadata | null;
+  message?: string;
+}

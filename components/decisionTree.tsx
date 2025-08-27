@@ -36,6 +36,7 @@ import {
   deleteEdge,
   setRootNode,
   validateTreeConnectivity,
+  getDecisionTreeById,
   DecisionTreeNode,
   DecisionTreeEdge 
 } from '@/lib/fastapi';
@@ -928,6 +929,9 @@ export function DecisionTree() {
   const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
   const [editingConditionalNode, setEditingConditionalNode] = useState<{ id: string; data: ConditionalNodeData } | null>(null);
   const router = useRouter();
+  
+  // Get the current tree ID from the store to know which specific tree we're editing
+  const { currentDecisionTreeId } = useAppStore();
 
   // Define node types with access to handlers
   const nodeTypes: NodeTypes = {
@@ -947,8 +951,13 @@ export function DecisionTree() {
   const loadDatabaseData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getDecisionTree();
+      // Use tree-specific API when editing a specific tree, otherwise use the general API
+      const data = currentDecisionTreeId 
+        ? await getDecisionTreeById(currentDecisionTreeId).then(response => ({ nodes: response.nodes, edges: response.edges }))
+        : await getDecisionTree();
+        
       console.log('✅ API Response received:', data);
+      console.log(`📊 Loading data for tree: ${currentDecisionTreeId ? `specific tree (${currentDecisionTreeId})` : 'default/general tree'}`);
       console.log('✅ Raw API data structure:', {
         hasNodes: !!data.nodes,
         hasEdges: !!data.edges,
@@ -1059,7 +1068,7 @@ export function DecisionTree() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentDecisionTreeId]);
 
 
 
@@ -1207,6 +1216,17 @@ export function DecisionTree() {
 
 
 
+  // Tree-aware node creation function
+  const createNodeForCurrentTree = async (nodeData: DecisionTreeNode) => {
+    if (currentDecisionTreeId) {
+      console.log(`Creating node for specific tree: ${currentDecisionTreeId}`);
+      return await createNode(nodeData, currentDecisionTreeId);
+    } else {
+      console.log('Creating node for default tree');
+      return await createNode(nodeData);
+    }
+  };
+
   const addNewStep = async () => {
     // Calculate position for new step to avoid overlaps
     const existingSteps = nodes.filter(node => node.type === 'tourStep');
@@ -1245,7 +1265,7 @@ export function DecisionTree() {
         position: newNode.position,
         data: newNode.data,
       };
-      await createNode(decisionTreeNode);
+      await createNodeForCurrentTree(decisionTreeNode);
     } catch (error) {
       console.error('Failed to create node:', error);
     }
@@ -1289,7 +1309,7 @@ export function DecisionTree() {
         position: newNode.position,
         data: newNode.data,
       };
-      await createNode(decisionTreeNode);
+      await createNodeForCurrentTree(decisionTreeNode);
     } catch (error) {
       console.error('Failed to create node:', error);
     }
@@ -1333,7 +1353,7 @@ export function DecisionTree() {
         position: newNode.position,
         data: newNode.data,
       };
-      await createNode(decisionTreeNode);
+      await createNodeForCurrentTree(decisionTreeNode);
     } catch (error) {
       console.error('Failed to create conditional node:', error);
     }
@@ -1392,7 +1412,9 @@ export function DecisionTree() {
 
   const handleValidateConnectivity = async (): Promise<RootValidationResult> => {
     try {
-      const result = await validateTreeConnectivity();
+      // Pass currentDecisionTreeId when available for tree-specific validation
+      const result = await validateTreeConnectivity(currentDecisionTreeId || undefined);
+      console.log(`📊 Validated connectivity for tree: ${currentDecisionTreeId ? `specific tree (${currentDecisionTreeId})` : 'default/general tree'}`);
       return result;
     } catch (error) {
       console.error('Failed to validate connectivity:', error);
