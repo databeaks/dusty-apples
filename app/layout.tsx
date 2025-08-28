@@ -1,6 +1,11 @@
+'use client';
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Navigation } from '@/components/navigation';
+import { GuidedTour } from '@/components/guidedTour';
+import { useAppStore } from '@/lib/store/appStore';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -12,10 +17,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Dusty Apple - Your Feedback Hub",
-  description: "Turn product feedback into customer engagement with Dusty Apple",
-};
+// Note: metadata export needs to be moved to a separate metadata file for client components
+// For now, we'll handle this in the head
+
+function RootLayoutContent({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  const { isGuidedTourOpen } = useAppStore();
+
+  return (
+    <div className="h-screen bg-gray-50 flex flex-col">
+      <Navigation />
+      <div className="flex-1">
+        {children}
+      </div>
+      {isGuidedTourOpen && <GuidedTour />}
+    </div>
+  );
+}
 
 export default function RootLayout({
   children,
@@ -24,10 +45,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <title>Dusty Apple - Your Feedback Hub</title>
+        <meta name="description" content="Turn product feedback into customer engagement with Dusty Apple" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <RootLayoutContent>{children}</RootLayoutContent>
       </body>
     </html>
   );

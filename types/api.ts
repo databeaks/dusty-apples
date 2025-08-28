@@ -138,3 +138,18 @@ export interface DefaultTourTreeResponse {
   default_tree: DecisionTreeMetadata | null;
   message?: string;
 }
+
+// Tour Session Types for Dashboard
+export interface TourSession {
+  id: string;
+  user_id: string;
+  tree_id: string;
+  tree_name: string;
+  status: 'in_progress' | 'completed' | 'abandoned';
+  date_started: string;
+  date_completed?: string;
+  current_step?: string;
+  answers: Record<string, any>;
+  recommendation?: any;
+  progress_percentage: number;
+}

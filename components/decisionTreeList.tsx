@@ -200,38 +200,43 @@ export function DecisionTreeList({ onEditTree }: DecisionTreeListProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Decision Trees</h1>
-          <p className="text-gray-600 mt-1">
-            Manage and organize your decision trees
-          </p>
+    <div className="flex-1 bg-gray-50 p-6">
+      <div className="w-full">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Decision Trees</h1>
+              <p className="mt-1 text-sm text-gray-600">
+                Manage and organize your decision trees
+              </p>
+            </div>
+            <div className="mt-4 sm:mt-0">
+              <Button 
+                onClick={handleCreateTree} 
+                disabled={isCreating}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {isCreating ? 'Creating...' : 'Create New Tree'}
+              </Button>
+            </div>
+          </div>
         </div>
-        <Button 
-          onClick={handleCreateTree} 
-          disabled={isCreating}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          {isCreating ? 'Creating...' : 'Create New Tree'}
-        </Button>
-      </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-        <Input
-          placeholder="Search trees by name, description, tags, or author..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+        {/* Search */}
+        <div className="relative max-w-md mb-6">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Search trees by name, description, tags, or author..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
 
-      {/* Trees List */}
-      {filteredTrees.length === 0 ? (
+        {/* Trees List */}
+        {filteredTrees.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
             <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -411,7 +416,8 @@ export function DecisionTreeList({ onEditTree }: DecisionTreeListProps) {
             </Card>
           ))}
         </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

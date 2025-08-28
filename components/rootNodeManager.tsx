@@ -77,11 +77,11 @@ export const RootNodeManager = ({
   };
   
   return (
-    <Card className="w-full">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center justify-between">
+    <Card className="w-64">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-xs flex items-center justify-between">
           <div className="flex items-center">
-            <Crown className="h-4 w-4 mr-2 text-red-600" />
+            <Crown className="h-3 w-3 mr-1 text-red-600" />
             Root Node Management
           </div>
           <Button
@@ -89,18 +89,18 @@ export const RootNodeManager = ({
             size="sm"
             onClick={handleManualValidation}
             disabled={isValidating}
-            className="h-6 w-6 p-0"
+            className="h-5 w-5 p-0"
           >
-            <RefreshCw className={`h-3 w-3 ${isValidating ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-2 w-2 ${isValidating ? 'animate-spin' : ''}`} />
           </Button>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 pt-0 px-2 pb-2">
         {/* Current Root Display */}
         <div>
           <Label className="text-xs font-medium text-gray-700">Current Root Node:</Label>
           {currentRoot ? (
-            <div className="mt-1 p-2 bg-green-50 rounded border border-green-200">
+            <div className="mt-1 p-1.5 bg-green-50 rounded border border-green-200">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium text-green-800 flex items-center">
@@ -113,7 +113,7 @@ export const RootNodeManager = ({
               </div>
             </div>
           ) : (
-            <div className="mt-1 p-2 bg-red-50 rounded border border-red-200">
+            <div className="mt-1 p-1.5 bg-red-50 rounded border border-red-200">
               <div className="flex items-center">
                 <AlertTriangle className="h-4 w-4 text-red-600 mr-2" />
                 <div className="text-sm text-red-700">No root node set</div>
@@ -126,7 +126,7 @@ export const RootNodeManager = ({
         {stepNodes.length > 0 && (
           <div>
             <Label className="text-xs font-medium text-gray-700">Set Root Node:</Label>
-            <div className="mt-1 flex space-x-2">
+            <div className="mt-1 flex space-x-1.5">
               <Select onValueChange={handleSetRoot} disabled={isSettingRoot}>
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Choose root step..." />
@@ -161,18 +161,18 @@ export const RootNodeManager = ({
         />
         
         {/* Quick Stats */}
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <div className="text-center p-2 bg-blue-50 rounded border">
-            <div className="font-medium text-blue-800">{stepNodes.length}</div>
-            <div className="text-blue-600">Steps</div>
+        <div className="grid grid-cols-3 gap-1 text-xs">
+          <div className="text-center p-1 bg-blue-50 rounded border">
+            <div className="font-medium text-blue-800 text-xs">{stepNodes.length}</div>
+            <div className="text-blue-600 text-xs">Steps</div>
           </div>
-          <div className="text-center p-2 bg-green-50 rounded border">
-            <div className="font-medium text-green-800">{nodes.filter(n => n.type === 'question').length}</div>
-            <div className="text-green-600">Questions</div>
+          <div className="text-center p-1 bg-green-50 rounded border">
+            <div className="font-medium text-green-800 text-xs">{nodes.filter(n => n.type === 'question').length}</div>
+            <div className="text-green-600 text-xs">Questions</div>
           </div>
-          <div className="text-center p-2 bg-orange-50 rounded border">
-            <div className="font-medium text-orange-800">{edges.length}</div>
-            <div className="text-orange-600">Connections</div>
+          <div className="text-center p-1 bg-orange-50 rounded border">
+            <div className="font-medium text-orange-800 text-xs">{edges.length}</div>
+            <div className="text-orange-600 text-xs">Links</div>
           </div>
         </div>
       </CardContent>

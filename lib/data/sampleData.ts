@@ -661,3 +661,98 @@ export const recentActivities: RecentActivity[] = [
     user: 'David Wilson',
   },
 ];
+
+// Tour Session Sample Data for Dashboard
+import { TourSession } from '@/types/api';
+
+export const sampleTourSessions: TourSession[] = [
+  {
+    id: 'tour-001',
+    user_id: 'user-123',
+    tree_id: 'tree-default',
+    tree_name: 'Databricks Workspace Setup',
+    status: 'completed',
+    date_started: '2024-01-15T09:30:00Z',
+    date_completed: '2024-01-15T10:45:00Z',
+    current_step: 'recommendation',
+    answers: {
+      'customer-type': 'New Customer (Trial)',
+      'use-case-category': 'Generative AI & Machine Learning',
+      'team_size': '2-5 people',
+      'product_type': 'Web Application'
+    },
+    recommendation: {
+      id: 'serverless-recommended',
+      title: 'Serverless Workspace Recommended'
+    },
+    progress_percentage: 100
+  },
+  {
+    id: 'tour-002',
+    user_id: 'user-123',
+    tree_id: 'tree-default',
+    tree_name: 'Databricks Workspace Setup',
+    status: 'in_progress',
+    date_started: '2024-01-20T14:15:00Z',
+    current_step: 'team_setup',
+    answers: {
+      'customer-type': 'AWS Customer/Cloud Migration',
+      'aws-billing': 'Direct billing acceptable',
+      'use-case-category': 'Data Analytics & Engineering'
+    },
+    progress_percentage: 65
+  },
+  {
+    id: 'tour-003',
+    user_id: 'user-123',
+    tree_id: 'tree-default',
+    tree_name: 'Databricks Workspace Setup',
+    status: 'completed',
+    date_started: '2024-01-10T11:20:00Z',
+    date_completed: '2024-01-10T12:10:00Z',
+    current_step: 'recommendation',
+    answers: {
+      'customer-type': 'Existing Customer (Sandbox)',
+      'use-case-category': 'Business User Enablement',
+      'team_size': '6-15 people'
+    },
+    recommendation: {
+      id: 'serverless-recommended',
+      title: 'Serverless Workspace Recommended'
+    },
+    progress_percentage: 100
+  },
+  {
+    id: 'tour-004',
+    user_id: 'user-123',
+    tree_id: 'tree-default',
+    tree_name: 'Databricks Workspace Setup',
+    status: 'abandoned',
+    date_started: '2024-01-08T16:45:00Z',
+    current_step: 'use-case-category',
+    answers: {
+      'customer-type': 'Production on Azure/GCP'
+    },
+    progress_percentage: 25
+  },
+  {
+    id: 'tour-005',
+    user_id: 'user-123',
+    tree_id: 'tree-default',
+    tree_name: 'Databricks Workspace Setup',
+    status: 'completed',
+    date_started: '2024-01-05T08:00:00Z',
+    date_completed: '2024-01-05T09:30:00Z',
+    current_step: 'recommendation',
+    answers: {
+      'customer-type': 'AWS Customer/Cloud Migration',
+      'aws-billing': 'Must use AWS Marketplace',
+      'use-case-category': 'Connectivity Requirements'
+    },
+    recommendation: {
+      id: 'aws-marketplace',
+      title: 'Express Setup + Buy with AWS'
+    },
+    progress_percentage: 100
+  }
+];

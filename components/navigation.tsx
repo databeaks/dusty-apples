@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store/appStore';
 import { getUser } from '@/lib/fastapi';
-import { Home, Settings, Bell, User, Menu, Loader2, BarChart3, GitBranch } from 'lucide-react';
+import { Home, User, Menu, Loader2, BarChart3, GitBranch } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -36,10 +36,8 @@ export function Navigation() {
 
   const navItems = [
     { id: 'home', label: 'Home', icon: Home, path: '/', isView: true },
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/', isView: true },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard', isView: false },
     { id: 'decision-tree', label: 'Decision Tree', icon: GitBranch, path: '/decision-tree', isView: false },
-    { id: 'settings', label: 'Settings', icon: Settings, path: '/', isView: true },
-    { id: 'notifications', label: 'Notifications', icon: Bell, path: '/', isView: true },
   ];
 
   return (
@@ -100,11 +98,6 @@ export function Navigation() {
 
           {/* Right side */}
           <div className="flex items-center space-x-4">
-            <Button variant="outline" size="sm" className="hidden sm:flex">
-              <Bell className="h-4 w-4 mr-2" />
-              Notifications
-            </Button>
-            
             <div className="flex items-center space-x-2">
               <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center">
                 {isLoadingUser ? (

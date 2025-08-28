@@ -59,25 +59,8 @@ function DecisionTreePageContent() {
 
   const renderHeader = () => {
     if (currentView === 'list') {
-      return (
-        <header className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <h1 className="text-xl font-semibold text-gray-900">Decision Trees</h1>
-              </div>
-              <div className="flex items-center space-x-4">
-                <a 
-                  href="/"
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  ← Back to Home
-                </a>
-              </div>
-            </div>
-          </div>
-        </header>
-      );
+      // No header for list view - DecisionTreeList component handles its own layout
+      return null;
     } else {
       return (
         <header className="bg-white border-b border-gray-200 shadow-sm">
@@ -142,12 +125,20 @@ function DecisionTreePageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-full bg-gray-50 flex flex-col overflow-hidden">
       {renderHeader()}
-      <main className="flex-1">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {renderContent()}
-        </div>
+      <main className={`flex-1 w-full ${currentView === 'editor' ? 'overflow-hidden' : ''}`}>
+        {currentView === 'list' ? (
+          // List view can scroll when there are many decision trees
+          <div className="w-full h-full overflow-y-auto">
+            {renderContent()}
+          </div>
+        ) : (
+          // Editor view is not scrollable - fixed height
+          <div className="w-full h-full overflow-hidden">
+            {renderContent()}
+          </div>
+        )}
       </main>
     </div>
   );

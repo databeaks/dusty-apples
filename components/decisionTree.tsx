@@ -518,134 +518,7 @@ const elkOptions = {
   'elk.hierarchyHandling': 'INCLUDE_CHILDREN', // Better hierarchy handling
 };
 
-// Function to apply root-left grid layout with layered questions
-const applyGridLayout = (nodes: Node[]): Node[] => {
-  const gridNodes = [...nodes];
-  
-  // Separate tour steps and questions
-  const tourSteps = gridNodes.filter(n => n.type === 'tourStep');
-  const questions = gridNodes.filter(n => n.type === 'question');
-  
-  // Simple grid: steps on left, questions spread to the right in layers
-  const stepY = 300; // All steps on same horizontal line
-  const questionBaseY = 500; // Questions positioned below steps
-  const baseStepSpacing = 500;
-  
-  // Layout tour steps horizontally
-  tourSteps.forEach((node, index) => {
-    node.position = {
-      x: 150 + (index * baseStepSpacing),
-      y: stepY,
-    };
-  });
-  
-  // Layout questions in layers to the right
-  let questionX = 600; // Start questions after first step
-  questions.forEach((node, index) => {
-    node.position = {
-      x: questionX,
-      y: questionBaseY + (index * 180), // Stagger vertically to avoid overlaps
-    };
-    questionX += 350; // Each question in its own X layer
-  });
-  
-  return gridNodes;
-};
 
-// Function to apply a hierarchical force-directed layout
-const applyForceLayout = (nodes: Node[], edges: Edge[]): Node[] => {
-  const forceNodes = [...nodes];
-  const iterations = 100;
-  const repulsionStrength = 50000;
-  const attractionStrength = 0.01;
-  const centeringForce = 0.001;
-  const minDistance = 200;
-  
-  // Initialize positions with root-left layout in mind
-  forceNodes.forEach((node, index) => {
-    if (!node.position.x || !node.position.y) {
-      // Place tour steps starting from left, questions spread to the right
-      const baseX = node.type === 'tourStep' ? 200 + (index * 200) : 600 + (index * 150);
-      node.position = {
-        x: baseX + (Math.random() - 0.5) * 100,
-        y: 300 + (Math.random() - 0.5) * 200, // Center around Y=300
-      };
-    }
-  });
-  
-  for (let iter = 0; iter < iterations; iter++) {
-    const forces = forceNodes.map(() => ({ x: 0, y: 0 }));
-    
-    // Repulsion between all nodes
-    for (let i = 0; i < forceNodes.length; i++) {
-      for (let j = i + 1; j < forceNodes.length; j++) {
-        const nodeA = forceNodes[i];
-        const nodeB = forceNodes[j];
-        
-        const dx = nodeA.position.x - nodeB.position.x;
-        const dy = nodeA.position.y - nodeB.position.y;
-        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-        
-        if (distance < minDistance) {
-          const force = repulsionStrength / (distance * distance);
-          const fx = (dx / distance) * force;
-          const fy = (dy / distance) * force;
-          
-          forces[i].x += fx;
-          forces[i].y += fy;
-          forces[j].x -= fx;
-          forces[j].y -= fy;
-        }
-      }
-    }
-    
-    // Attraction along edges
-    edges.forEach(edge => {
-      const sourceIndex = forceNodes.findIndex(n => n.id === edge.source);
-      const targetIndex = forceNodes.findIndex(n => n.id === edge.target);
-      
-      if (sourceIndex !== -1 && targetIndex !== -1) {
-        const sourceNode = forceNodes[sourceIndex];
-        const targetNode = forceNodes[targetIndex];
-        
-        const dx = targetNode.position.x - sourceNode.position.x;
-        const dy = targetNode.position.y - sourceNode.position.y;
-        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-        
-        const force = distance * attractionStrength;
-        const fx = (dx / distance) * force;
-        const fy = (dy / distance) * force;
-        
-        forces[sourceIndex].x += fx;
-        forces[sourceIndex].y += fy;
-        forces[targetIndex].x -= fx;
-        forces[targetIndex].y -= fy;
-      }
-    });
-    
-    // Apply forces
-    forceNodes.forEach((node, index) => {
-      node.position.x += forces[index].x;
-      node.position.y += forces[index].y;
-      
-      // Center the layout vertically
-      node.position.y += (300 - node.position.y) * centeringForce;
-      
-      // Keep tour steps towards the left, questions towards the right
-      if (node.type === 'tourStep') {
-        // Pull steps towards left side
-        node.position.x += (Math.max(150, node.position.x - 200) - node.position.x) * (centeringForce * 0.5);
-      } else {
-        // Keep questions on the right side
-        node.position.x += (Math.max(600, node.position.x) - node.position.x) * (centeringForce * 0.5);
-      }
-    });
-  }
-  
-  // Apply final hierarchy enforcement
-  const hierarchicalNodes = enforceHierarchy(forceNodes, edges);
-  return hierarchicalNodes;
-};
 
 // Function to enforce root-left layout with layered questions
 const enforceHierarchy = (nodes: Node[], edges: Edge[]): Node[] => {
@@ -914,9 +787,8 @@ const applyElkLayout = async (nodes: Node[], edges: Edge[]): Promise<{ nodes: No
 
     return { nodes: fixedNodes, edges };
   } catch (error) {
-    console.error('ELK layout failed, falling back to grid layout:', error);
-    const gridNodes = applyGridLayout(nodes);
-    return { nodes: gridNodes, edges };
+    console.error('ELK layout failed, using original positions:', error);
+    return { nodes, edges };
   }
 };
 
@@ -1445,7 +1317,7 @@ export function DecisionTree() {
   }
 
   return (
-    <div className="w-full h-full flex-1" style={{ height: 'calc(100vh - 120px)' }}>
+    <div className="w-full h-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -1469,7 +1341,7 @@ export function DecisionTree() {
         key="reactflow-database"
       >
         <Background key="background" />
-        <Controls key="controls" />
+        <Controls key="controls" position="bottom-right" style={{ right: '8px', bottom: '8px' }} />
         <MiniMap key="minimap" />
         <Panel key="panel-left" position="top-left" className="space-y-2">
           {/* Root Node Management Panel */}
@@ -1480,10 +1352,10 @@ export function DecisionTree() {
             onValidateConnectivity={handleValidateConnectivity}
           />
           
-          <div className="bg-white p-3 rounded-lg shadow-lg border">
+          <div className="bg-white p-2 rounded-lg shadow-lg border w-64">
             <div className="text-xs font-medium text-gray-700 mb-2">
               Layout & Connections
-              <span className="ml-2 text-gray-500">({edges.length} connections)</span>
+              <span className="ml-1 text-gray-500">({edges.length})</span>
             </div>
             <div className="space-y-2">
               <Button
@@ -1492,45 +1364,20 @@ export function DecisionTree() {
                 onClick={async () => {
                   await loadDatabaseData();
                 }}
-                className="flex items-center bg-green-50 hover:bg-green-100 w-full"
+                className="flex items-center bg-green-50 hover:bg-green-100 w-full text-xs"
               >
-                <Layout className="h-4 w-4 mr-1" />
-                Apply ELK Layout
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const gridNodes = applyGridLayout(nodes);
-                  const hierarchicalNodes = enforceHierarchy(gridNodes, edges);
-                  setNodes(hierarchicalNodes);
-                }}
-                className="flex items-center bg-blue-50 hover:bg-blue-100 w-full"
-              >
-                <GitBranch className="h-4 w-4 mr-1" />
-                Grid Layout
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const forceNodes = applyForceLayout(nodes, edges);
-                  setNodes(forceNodes);
-                }}
-                className="flex items-center bg-purple-50 hover:bg-purple-100 w-full"
-              >
-                <MessageSquare className="h-4 w-4 mr-1" />
-                Force Layout
+                <Layout className="h-3 w-3 mr-1" />
+                Reset Position
               </Button>
               {selectedEdges.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={deleteSelectedEdges}
-                  className="flex items-center bg-red-50 hover:bg-red-100 w-full text-red-700"
+                  className="flex items-center bg-red-50 hover:bg-red-100 w-full text-red-700 text-xs"
                 >
-                  <X className="h-4 w-4 mr-1" />
-                  Delete {selectedEdges.length} Connection{selectedEdges.length > 1 ? 's' : ''}
+                  <X className="h-3 w-3 mr-1" />
+                  Delete {selectedEdges.length} Link{selectedEdges.length > 1 ? 's' : ''}
                 </Button>
               )}
               <div className="text-xs text-gray-600 p-2 bg-blue-50 rounded border">
@@ -1553,24 +1400,24 @@ export function DecisionTree() {
           </div>
         </Panel>
         <Panel key="panel-right" position="top-right" className="space-y-2">
-          <div className="bg-white p-3 rounded-lg shadow-lg border">
+          <div className="bg-white p-2 rounded-lg shadow-lg border w-48">
             <div className="text-xs font-medium text-gray-700 mb-2">Add Nodes</div>
             <div className="space-y-2">
-              <Button onClick={addNewStep} className="shadow-lg bg-blue-600 hover:bg-blue-700 w-full">
-                <Plus className="h-4 w-4 mr-2" />
+              <Button onClick={addNewStep} className="shadow-lg bg-blue-600 hover:bg-blue-700 w-full text-xs">
+                <Plus className="h-3 w-3 mr-1" />
                 Add Step
               </Button>
-              <Button onClick={addNewQuestion} className="shadow-lg bg-green-600 hover:bg-green-700 w-full">
-                <Plus className="h-4 w-4 mr-2" />
+              <Button onClick={addNewQuestion} className="shadow-lg bg-green-600 hover:bg-green-700 w-full text-xs">
+                <Plus className="h-3 w-3 mr-1" />
                 Add Question
               </Button>
-              <Button onClick={addNewConditionalNode} className="shadow-lg bg-orange-600 hover:bg-orange-700 w-full">
-                <GitBranch className="h-4 w-4 mr-2" />
+              <Button onClick={addNewConditionalNode} className="shadow-lg bg-orange-600 hover:bg-orange-700 w-full text-xs">
+                <GitBranch className="h-3 w-3 mr-1" />
                 Add Conditional
               </Button>
             </div>
           </div>
-          <div className="bg-white p-3 rounded-lg shadow-lg border">
+          <div className="bg-white p-2 rounded-lg shadow-lg border w-48">
             <div className="text-xs font-medium text-gray-700 mb-2">Tour Integration</div>
             <Button 
               onClick={async () => {
@@ -1592,9 +1439,9 @@ export function DecisionTree() {
                   alert('Failed to start database tour. Please ensure you have nodes in your decision tree.');
                 }
               }}
-              className="shadow-lg bg-purple-600 hover:bg-purple-700 w-full text-xs"
+              className="shadow-lg bg-purple-600 hover:bg-purple-700 w-full text-xs py-2"
             >
-              <GitBranch className="h-4 w-4 mr-2" />
+              <GitBranch className="h-3 w-3 mr-1" />
               Test Database Tour
             </Button>
           </div>
