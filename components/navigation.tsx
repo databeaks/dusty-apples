@@ -34,10 +34,26 @@ export function Navigation() {
     fetchUserData();
   }, []);
 
+  // Sync currentView with pathname
+  useEffect(() => {
+    if (pathname === '/') {
+      setCurrentView('home');
+    } else if (pathname === '/dashboard') {
+      setCurrentView('dashboard');
+    } else if (pathname.startsWith('/decision-tree')) {
+      setCurrentView('decision-tree-list');
+    }
+  }, [pathname, setCurrentView]);
+
+  // Debug currentView changes
+  useEffect(() => {
+    console.log('Navigation: currentView changed to:', currentView, 'pathname:', pathname);
+  }, [currentView, pathname]);
+
   const navItems = [
     { id: 'home', label: 'Home', icon: Home, path: '/', isView: true },
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard', isView: false },
-    { id: 'decision-tree', label: 'Decision Tree', icon: GitBranch, path: '/decision-tree', isView: false },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard', isView: true },
+    { id: 'decision-tree-list', label: 'Decision Tree', icon: GitBranch, path: '/decision-tree', isView: true },
   ];
 
   return (
@@ -57,41 +73,38 @@ export function Navigation() {
             <div className="hidden md:ml-8 md:flex md:space-x-8">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = item.isView 
-                  ? currentView === item.id 
-                  : pathname === item.path;
-                
-                if (item.isView) {
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setCurrentView(item.id as any)}
-                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive
-                          ? 'text-red-600 bg-red-50'
-                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {item.label}
-                    </button>
-                  );
-                } else {
-                  return (
-                    <Link
-                      key={item.id}
-                      href={item.path}
-                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive
-                          ? 'text-red-600 bg-red-50'
-                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {item.label}
-                    </Link>
-                  );
+                // Use appropriate logic for each navigation item
+                let isActive = false;
+                if (item.id === 'home') {
+                  isActive = pathname === '/';
+                } else if (item.id === 'dashboard') {
+                  isActive = pathname === '/dashboard' || pathname === '/dashboard/';
+                } else if (item.id === 'decision-tree-list') {
+                  isActive = pathname.startsWith('/decision-tree');
                 }
+                
+                // Debug logging for each nav item
+                console.log(`Nav item ${item.id}:`, {
+                  itemId: item.id,
+                  pathname,
+                  itemPath: item.path,
+                  isActive
+                });
+                
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.path}
+                    className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      isActive
+                        ? 'text-red-600 bg-red-50'
+                        : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 mr-2" />
+                    {item.label}
+                  </Link>
+                );
               })}
             </div>
           </div>
@@ -131,45 +144,31 @@ export function Navigation() {
             <div className="space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = item.isView 
-                  ? currentView === item.id 
-                  : pathname === item.path;
-                
-                if (item.isView) {
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentView(item.id as any);
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className={`w-full text-left flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors ${
-                        isActive
-                          ? 'text-red-600 bg-red-50'
-                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Icon className="h-5 w-5 mr-3" />
-                      {item.label}
-                    </button>
-                  );
-                } else {
-                  return (
-                    <Link
-                      key={item.id}
-                      href={item.path}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={`w-full text-left flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors ${
-                        isActive
-                          ? 'text-red-600 bg-red-50'
-                          : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Icon className="h-5 w-5 mr-3" />
-                      {item.label}
-                    </Link>
-                  );
+                // Use appropriate logic for each navigation item
+                let isActive = false;
+                if (item.id === 'home') {
+                  isActive = pathname === '/';
+                } else if (item.id === 'dashboard') {
+                  isActive = pathname === '/dashboard' || pathname === '/dashboard/';
+                } else if (item.id === 'decision-tree-list') {
+                  isActive = pathname.startsWith('/decision-tree');
                 }
+                
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.path}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`w-full text-left flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors ${
+                      isActive
+                        ? 'text-red-600 bg-red-50'
+                        : 'text-gray-700 hover:text-red-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 mr-3" />
+                    {item.label}
+                  </Link>
+                );
               })}
             </div>
           </div>

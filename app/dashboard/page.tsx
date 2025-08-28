@@ -99,8 +99,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex-1 bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="flex-1 bg-gray-50 p-6 w-full">
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -299,7 +298,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
     </div>
   );
 }
