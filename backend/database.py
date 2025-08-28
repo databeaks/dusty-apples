@@ -13,8 +13,8 @@ import os.path
 
 env_loaded = []
 if load_dotenv('.env.production'):
-    env_loaded.append('.env')
-if load_dotenv('.env.local'):
+    env_loaded.append('.env.production')
+if load_dotenv('.env.local', override=True):
     env_loaded.append('.env.local')
 
 # Initialize logging first
