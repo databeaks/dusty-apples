@@ -66,6 +66,10 @@ async def create_decision_tree(request: Request):
         body = await request.json()
         tree_id = str(uuid.uuid4())
         
+        # Get current user from headers (same logic as /api/user endpoint)
+        user_email = request.headers.get("X-Forwarded-Email", "test@example.com")
+        logger.info(f"Creating decision tree for user: {user_email}")
+        
         conn = get_db_connection()
         
         with conn.cursor() as cur:
@@ -78,8 +82,8 @@ async def create_decision_tree(request: Request):
                 body.get("name", "Untitled Decision Tree"),
                 body.get("description", ""),
                 body.get("tags", []),
-                body.get("created_by", "System"),
-                body.get("last_edited_by", "System")
+                user_email,  # Use actual user email
+                user_email   # Use actual user email
             ))
             
             conn.commit()
@@ -89,6 +93,60 @@ async def create_decision_tree(request: Request):
         raise HTTPException(status_code=500, detail="Failed to create decision tree")
     finally:
         conn.close()
+
+# Specific routes MUST come before parameterized routes
+@router.get("/test")
+async def test_route():
+    """Test route to verify this router is working"""
+    try:
+        logger.info("Test route called successfully")
+        return {"message": "Decision trees router is working", "router": "decision_trees"}
+    except Exception as e:
+        logger.error(f"Test route failed: {e}")
+        raise
+
+@router.get("/default-for-tour")
+async def get_default_tour_tree():
+    """Get the decision tree that is currently set as default for guided tours"""
+    try:
+        logger.info("Getting default tour tree...")
+        conn = get_db_connection()
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            logger.info("Executing query for default tour tree")
+            cur.execute("SELECT * FROM decision_trees WHERE is_default_for_tour = TRUE LIMIT 1")
+            tree = cur.fetchone()
+            logger.info(f"Query result: {tree is not None}")
+            
+            if not tree:
+                logger.warning("No default tour tree found")
+                return {"default_tree": None, "message": "No default tour tree set"}
+            
+            logger.info(f"Found default tree: {tree['name']}")
+            return {
+                "default_tree": {
+                    "id": str(tree["id"]),
+                    "name": tree["name"],
+                    "description": tree["description"],
+                    "tags": tree["tags"] or [],
+                    "created_by": tree["created_by"],
+                    "last_edited_by": tree["last_edited_by"],
+                    "version": tree["version"],
+                    "is_default_for_tour": True,
+                    "created_at": tree["created_at"].isoformat() if tree["created_at"] else None,
+                    "updated_at": tree["updated_at"].isoformat() if tree["updated_at"] else None
+                }
+            }
+    except Exception as e:
+        logger.error(f"Failed to get default tour tree: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception details: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to get default tour tree: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 @router.get("/{tree_id}")
 async def get_decision_tree(tree_id: str):
@@ -170,6 +228,10 @@ async def update_decision_tree(tree_id: str, request: Request):
     try:
         body = await request.json()
         
+        # Get current user from headers
+        user_email = request.headers.get("X-Forwarded-Email", "test@example.com")
+        logger.info(f"Updating decision tree {tree_id} by user: {user_email}")
+        
         conn = get_db_connection()
         
         with conn.cursor() as cur:
@@ -193,16 +255,14 @@ async def update_decision_tree(tree_id: str, request: Request):
             if "tags" in body:
                 update_fields.append("tags = %s")
                 values.append(body["tags"])
-                
-            if "last_edited_by" in body:
-                update_fields.append("last_edited_by = %s")
-                values.append(body["last_edited_by"])
             
             if "version" in body:
                 update_fields.append("version = %s")
                 values.append(body["version"])
                 
-            # Always update the updated_at timestamp
+            # Always update last_edited_by and updated_at
+            update_fields.append("last_edited_by = %s")
+            values.append(user_email)
             update_fields.append("updated_at = CURRENT_TIMESTAMP")
             values.append(tree_id)
             
@@ -248,6 +308,10 @@ async def duplicate_decision_tree(tree_id: str, request: Request):
         body = await request.json()
         new_tree_id = str(uuid.uuid4())
         
+        # Get current user from headers
+        user_email = request.headers.get("X-Forwarded-Email", "test@example.com")
+        logger.info(f"Duplicating decision tree {tree_id} by user: {user_email}")
+        
         conn = get_db_connection()
         
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -258,7 +322,7 @@ async def duplicate_decision_tree(tree_id: str, request: Request):
             if not original_tree:
                 raise HTTPException(status_code=404, detail="Original decision tree not found")
             
-            # Create new tree
+            # Create new tree with current user as creator
             new_name = body.get("name", f"{original_tree['name']} (Copy)")
             cur.execute("""
                 INSERT INTO decision_trees (id, name, description, tags, created_by, last_edited_by, version)
@@ -268,8 +332,8 @@ async def duplicate_decision_tree(tree_id: str, request: Request):
                 new_name,
                 original_tree["description"],
                 original_tree["tags"],
-                body.get("created_by", original_tree["created_by"]),
-                body.get("last_edited_by", original_tree["last_edited_by"]),
+                user_email,  # Current user becomes creator of the duplicate
+                user_email,  # Current user is also the last editor
                 1  # Reset version to 1 for duplicate
             ))
             
@@ -378,38 +442,6 @@ async def export_decision_tree(tree_id: str):
     except Exception as e:
         logger.error(f"Failed to export decision tree: {e}")
         raise HTTPException(status_code=500, detail="Failed to export decision tree")
-    finally:
-        conn.close()
-
-@router.get("/default-for-tour")
-async def get_default_tour_tree():
-    """Get the decision tree that is currently set as default for guided tours"""
-    conn = get_db_connection()
-    try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM decision_trees WHERE is_default_for_tour = TRUE")
-            tree = cur.fetchone()
-            
-            if not tree:
-                return {"default_tree": None, "message": "No default tour tree set"}
-            
-            return {
-                "default_tree": {
-                    "id": str(tree["id"]),
-                    "name": tree["name"],
-                    "description": tree["description"],
-                    "tags": tree["tags"] or [],
-                    "created_by": tree["created_by"],
-                    "last_edited_by": tree["last_edited_by"],
-                    "version": tree["version"],
-                    "is_default_for_tour": True,
-                    "created_at": tree["created_at"].isoformat() if tree["created_at"] else None,
-                    "updated_at": tree["updated_at"].isoformat() if tree["updated_at"] else None
-                }
-            }
-    except Exception as e:
-        logger.error(f"Failed to get default tour tree: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get default tour tree")
     finally:
         conn.close()
 

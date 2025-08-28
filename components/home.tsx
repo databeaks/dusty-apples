@@ -48,7 +48,13 @@ export function Home() {
             {/* Main CTA */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
               <Button 
-                onClick={openGuidedTour}
+                onClick={async () => {
+                  try {
+                    await openGuidedTour();
+                  } catch (error) {
+                    console.error('Failed to start discovery tour:', error);
+                  }
+                }}
                 size="lg"
                 className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-lg px-8 py-3"
               >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DecisionTree } from '@/components/decisionTree';
 import { DecisionTreeList } from '@/components/decisionTreeList';
@@ -9,7 +9,7 @@ import { getDecisionTreeById } from '@/lib/fastapi';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 
-export default function DecisionTreePage() {
+function DecisionTreePageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const treeId = searchParams.get('id');
@@ -150,5 +150,20 @@ export default function DecisionTreePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function DecisionTreePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <DecisionTreePageContent />
+    </Suspense>
   );
 }

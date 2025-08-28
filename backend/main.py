@@ -19,16 +19,22 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Simple FastAPI + React App")
 
 # --- CORS Configuration ---
+# Configure CORS for development and Databricks Apps
+origins = [
+    "http://localhost:3000",  # Local development
+    "http://127.0.0.1:3000",
+    "https://*.cloud.databricks.com",  # Databricks Apps domains
+    "https://*.databricks.com",
+    "wss://*.cloud.databricks.com",
+    "wss://*.databricks.com"
+]
+
+# Add CORS middleware directly to both apps
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js development server
-        "http://127.0.0.1:3000",  # Alternative localhost format
-        "https://localhost:3000", # HTTPS variant
-        "https://127.0.0.1:3000", # HTTPS alternative
-    ],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 

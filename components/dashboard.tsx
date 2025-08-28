@@ -187,10 +187,16 @@ export function Dashboard() {
               </Button>
               
               <div className="pt-4 border-t border-gray-100">
-                              <Button 
-                onClick={openGuidedTour}
-                className="w-full bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600"
-              >
+                <Button 
+                  onClick={async () => {
+                    try {
+                      await openGuidedTour();
+                    } catch (error) {
+                      console.error('Failed to start setup tour:', error);
+                    }
+                  }}
+                  className="w-full bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600"
+                >
                   <Play className="h-4 w-4 mr-2" />
                   Start Setup Tour
                 </Button>

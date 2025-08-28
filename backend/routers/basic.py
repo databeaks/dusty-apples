@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, Request
+from backend.database import test_db_connection
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["basic"])
@@ -29,4 +30,30 @@ async def get_data():
 async def get_user(request: Request):
     logger.info("User info requested at /api/user")
     user_email = request.headers.get("X-Forwarded-Email", "test@example.com")
-    return {"email": user_email} 
+    return {"email": user_email}
+
+@router.get("/api/db-test")
+async def database_test():
+    """Test database connection and return connection info"""
+    logger.info("Database test requested at /api/db-test")
+    return test_db_connection()
+
+@router.get("/api/env-info")
+async def environment_info():
+    """Return environment configuration info (without secrets)"""
+    import os
+    from backend.database import ENVIRONMENT
+    
+    logger.info("Environment info requested at /api/env-info")
+    
+    # Safe environment info (no secrets)
+    info = {
+        "environment": ENVIRONMENT,
+        "databricks_instance_name": os.getenv("DATABRICKS_INSTANCE_NAME", "not_set"),
+        "databricks_user_name": os.getenv("DATABRICKS_USER_NAME", "not_set"),
+        "database_url_set": bool(os.getenv("DATABASE_URL")),
+        "databricks_host_set": bool(os.getenv("DATABRICKS_HOST")),
+        "databricks_token_set": bool(os.getenv("DATABRICKS_TOKEN")),
+    }
+    
+    return info 

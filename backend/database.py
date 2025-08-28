@@ -4,23 +4,149 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import HTTPException
 from dotenv import load_dotenv
+import uuid
+from urllib.parse import urlparse, urlunparse
 
-# Load environment variables from .env.local
-load_dotenv('.env.local')
+# Load environment variables
+# Load .env first (base configuration), then .env.local (local overrides)
+import os.path
 
+env_loaded = []
+if load_dotenv('.env.production'):
+    env_loaded.append('.env')
+if load_dotenv('.env.local'):
+    env_loaded.append('.env.local')
+
+# Initialize logging first
 logger = logging.getLogger(__name__)
 
+# Log which environment files were loaded
+if env_loaded:
+    logger.info(f"Loaded environment files: {', '.join(env_loaded)}")
+else:
+    logger.info("No environment files found, using system environment variables")
+
+# Environment detection
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local").lower()
+logger.info(f"Environment mode: {ENVIRONMENT}")
+
+def get_databricks_database_url():
+    """Generate database URL using Databricks SDK for production deployments"""
+    try:
+        from databricks.sdk import WorkspaceClient
+        
+        # Get required environment variables for Databricks
+        instance_name = os.getenv("DATABRICKS_INSTANCE_NAME")
+        database_name = "databricks_postgres"
+        user_name = os.getenv("DATABRICKS_USER_NAME")
+        
+        if not all([instance_name, database_name, user_name]):
+            missing_vars = []
+            if not instance_name: missing_vars.append("DATABRICKS_INSTANCE_NAME")
+            if not database_name: missing_vars.append("DATABRICKS_DATABASE_NAME")
+            if not user_name: missing_vars.append("DATABRICKS_USER_NAME")
+            
+            raise ValueError(f"Missing required Databricks environment variables: {', '.join(missing_vars)}")
+        
+        # Initialize Databricks WorkspaceClient (uses default authentication)
+        logger.info("Initializing Databricks WorkspaceClient...")
+        w = WorkspaceClient()
+        
+        # Get database instance details
+        logger.info(f"Getting database instance details for: {instance_name}")
+        instance = w.database.get_database_instance(name=instance_name)
+        
+        # Generate database credentials
+        logger.info(f"Generating database credentials for instance: {instance_name}")
+        cred = w.database.generate_database_credential(
+            request_id=str(uuid.uuid4()), 
+            instance_names=[instance_name]
+        )
+        
+        # Construct PostgreSQL connection URL using the new pattern
+        host = instance.read_write_dns
+        password = cred.token
+        port = 5432  # Default PostgreSQL port
+        
+        if not all([host, password]):
+            raise ValueError("Incomplete database credentials received from Databricks")
+        
+        # Build connection URL with SSL requirement
+        database_url = f"postgresql://{user_name}:{password}@{host}:{port}/{database_name}?sslmode=require"
+        logger.info(f"Successfully generated database URL for host: {host}")
+        
+        return database_url
+            
+    except ImportError:
+        logger.error("Databricks SDK not installed. Install with: pip install databricks-sdk")
+        raise HTTPException(
+            status_code=500, 
+            detail="Databricks SDK not installed. Required for production database access."
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate Databricks database credentials: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate database credentials: {str(e)}"
+        )
+
 # Database Configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+def get_database_url():
+    """Get database URL based on environment"""
+    if ENVIRONMENT == "production":
+        return get_databricks_database_url()
+    else:
+        # Local development configuration
+        return os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
+
+# Cache database URL for local development (but regenerate for production each time)
+_cached_database_url = None
 
 def get_db_connection():
     """Get a database connection"""
+    global _cached_database_url
+    
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        # For production, always generate fresh credentials to handle potential credential rotation
+        # For local development, cache the URL to avoid unnecessary overhead
+        if ENVIRONMENT == "production":
+            database_url = get_database_url()
+        else:
+            if _cached_database_url is None:
+                _cached_database_url = get_database_url()
+            database_url = _cached_database_url
+        
+        logger.debug(f"Connecting to database in {ENVIRONMENT} environment")
+        conn = psycopg2.connect(database_url)
         return conn
     except Exception as e:
-        logger.error(f"Database connection failed: {e}")
+        logger.error(f"Database connection failed in {ENVIRONMENT} environment: {e}")
+        # In production, try to clear any cached credentials and retry once
+        if ENVIRONMENT == "production":
+            logger.info("Retrying database connection with fresh credentials...")
+            try:
+                database_url = get_database_url()
+                conn = psycopg2.connect(database_url)
+                return conn
+            except Exception as retry_error:
+                logger.error(f"Database retry connection also failed: {retry_error}")
+        
         raise HTTPException(status_code=500, detail="Database connection failed")
+
+def test_db_connection():
+    """Test database connection and return database version info"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT version()")
+            version = cur.fetchone()[0]
+            logger.info(f"[SUCCESS] Connected to: {version}")
+            return {"status": "success", "version": version, "environment": ENVIRONMENT}
+    except Exception as e:
+        logger.error(f"Database test connection failed: {e}")
+        return {"status": "error", "message": str(e), "environment": ENVIRONMENT}
+    finally:
+        conn.close()
 
 def init_database():
     """Initialize database tables for decision tree"""

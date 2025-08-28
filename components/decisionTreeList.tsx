@@ -71,9 +71,8 @@ export function DecisionTreeList({ onEditTree }: DecisionTreeListProps) {
       const response = await createDecisionTree({
         name: 'New Decision Tree',
         description: 'A new decision tree',
-        tags: [],
-        created_by: 'User',
-        last_edited_by: 'User'
+        tags: []
+        // created_by and last_edited_by are now handled by the backend based on the current user
       });
       
       await loadTrees(); // Refresh the list
@@ -103,9 +102,8 @@ export function DecisionTreeList({ onEditTree }: DecisionTreeListProps) {
   const handleDuplicateTree = async (treeId: string, treeName: string) => {
     try {
       const response = await duplicateDecisionTree(treeId, {
-        name: `${treeName} (Copy)`,
-        created_by: 'User',
-        last_edited_by: 'User'
+        name: `${treeName} (Copy)`
+        // created_by and last_edited_by are now handled by the backend based on the current user
       });
       
       await loadTrees(); // Refresh the list

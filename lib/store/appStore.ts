@@ -28,6 +28,7 @@ interface AppStore {
   databaseTourSteps: TourStep[];
   databaseConditionalNodes: ConditionalNodeData[];
   isLoadingDatabaseTour: boolean;
+  databaseTourError: string | null;
   
   // Root-based navigation state
   tourFlow: TourFlow | null;
@@ -38,7 +39,7 @@ interface AppStore {
   setCurrentStepIndex: (index: number) => void;
   updateFormAnswer: (questionId: string, value: string | string[]) => void;
   resetGuidedTour: () => void;
-  openGuidedTour: () => void;
+  openGuidedTour: () => Promise<void>;
   closeGuidedTour: () => void;
   nextStep: () => void;
   previousStep: () => void;
@@ -51,6 +52,7 @@ interface AppStore {
   setDatabaseTourSteps: (steps: TourStep[]) => void;
   setDatabaseConditionalNodes: (nodes: ConditionalNodeData[]) => void;
   setIsLoadingDatabaseTour: (loading: boolean) => void;
+  setDatabaseTourError: (error: string | null) => void;
   loadDatabaseTourSteps: () => Promise<void>;
   
   // Root-based navigation actions
@@ -80,6 +82,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   databaseTourSteps: [],
   databaseConditionalNodes: [],
   isLoadingDatabaseTour: false,
+  databaseTourError: null,
   
   // Root-based navigation initial state
   tourFlow: null,
@@ -109,11 +112,43 @@ export const useAppStore = create<AppStore>((set, get) => ({
       isGuidedTourOpen: false,
     }),
   
-  openGuidedTour: () => 
-    set({ 
-      isGuidedTourOpen: true,
-      currentView: 'guided-tour'
-    }),
+  openGuidedTour: async () => {
+    try {
+      // Clear any previous errors and set loading state
+      set({ 
+        useDatabaseTour: true,
+        isLoadingDatabaseTour: true,
+        databaseTourError: null
+      });
+      
+      console.log('🚀 Starting guided tour with default decision tree...');
+      
+      // Load the default decision tree tour steps
+      const { loadDatabaseTourSteps } = get();
+      await loadDatabaseTourSteps();
+      
+      // Open the guided tour
+      set({ 
+        isGuidedTourOpen: true,
+        currentView: 'guided-tour'
+      });
+      
+      console.log('✅ Guided tour started with default decision tree');
+      
+    } catch (error) {
+      console.error('Failed to start guided tour with default decision tree:', error);
+      
+      // Fallback to static tour if database tour fails
+      console.log('📋 Falling back to static tour due to error:', error);
+      set({ 
+        useDatabaseTour: false,
+        isGuidedTourOpen: true,
+        currentView: 'guided-tour',
+        isLoadingDatabaseTour: false,
+        databaseTourError: null // Clear error when falling back
+      });
+    }
+  },
   
   closeGuidedTour: () =>
     set({
@@ -148,15 +183,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   
   setIsLoadingDatabaseTour: (loading) => set({ isLoadingDatabaseTour: loading }),
   
+  setDatabaseTourError: (error) => set({ databaseTourError: error }),
+  
   loadDatabaseTourSteps: async () => {
     const { convertDatabaseToTourSteps } = await import('@/lib/fastapi');
-    set({ isLoadingDatabaseTour: true });
+    set({ isLoadingDatabaseTour: true, databaseTourError: null });
     try {
       const result = await convertDatabaseToTourSteps();
       set({ 
         databaseTourSteps: result.steps, 
         databaseConditionalNodes: result.conditionalNodes,
-        isLoadingDatabaseTour: false 
+        isLoadingDatabaseTour: false,
+        databaseTourError: null
       });
       console.log('Database tour data loaded successfully:', {
         steps: result.steps.length,
@@ -164,7 +202,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       });
     } catch (error) {
       console.error('Failed to load database tour steps:', error);
-      set({ isLoadingDatabaseTour: false });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load tour data';
+      set({ 
+        isLoadingDatabaseTour: false,
+        databaseTourError: errorMessage
+      });
+      // Re-throw the error so openGuidedTour knows it failed
+      throw error;
     }
   },
   
@@ -174,7 +218,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     
     // Load tour steps if not already loaded
     if (databaseTourSteps.length === 0) {
-      await loadDatabaseTourSteps();
+      try {
+        await loadDatabaseTourSteps();
+      } catch (error) {
+        console.error('Failed to initialize tour from root:', error);
+        throw new Error('Failed to load database tour data for initialization');
+      }
     }
     
     const allSteps = get().databaseTourSteps;

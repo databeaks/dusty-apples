@@ -163,7 +163,9 @@ export function GuidedTour() {
     databaseTourSteps,
     databaseConditionalNodes,
     isLoadingDatabaseTour,
+    databaseTourError,
     setUseDatabaseTour,
+    setDatabaseTourError,
     loadDatabaseTourSteps,
     getMainTourSteps,
     navigateToNextStep,
@@ -193,11 +195,15 @@ export function GuidedTour() {
   
   // Load database tour steps when switching to database mode
   useEffect(() => {
-    if (useDatabaseTour && databaseTourSteps.length === 0 && !isLoadingDatabaseTour) {
-      // Only load if we're actually in database tour mode and don't have data yet
-      loadDatabaseTourSteps();
+    if (useDatabaseTour && databaseTourSteps.length === 0 && !isLoadingDatabaseTour && !databaseTourError) {
+      // Only load if we're in database mode, don't have data, not currently loading, and no error state
+      console.log('Loading database tour steps from useEffect...');
+      loadDatabaseTourSteps().catch(error => {
+        console.error('Failed to load database tour steps in useEffect:', error);
+        // Error is already handled by the store, so no need to do anything here
+      });
     }
-  }, [useDatabaseTour, databaseTourSteps.length, isLoadingDatabaseTour]);
+  }, [useDatabaseTour, databaseTourSteps.length, isLoadingDatabaseTour, databaseTourError]);
   
   // Initialize root-based tour when database tour steps are loaded
   useEffect(() => {
@@ -493,24 +499,26 @@ export function GuidedTour() {
     );
   }
 
-  // Show error state if no steps available
+  // Show error state if no steps available or if there was a load error
   if (useDatabaseTour && databaseTourSteps.length === 0 && !isLoadingDatabaseTour) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 text-center">
           <div className="text-red-500 mb-4">
-            <X className="h-8 w-8 mx-auto" />
+            <AlertTriangle className="h-8 w-8 mx-auto" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Tour Steps Found</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            {databaseTourError ? 'Error Loading Tour Data' : 'No Tour Steps Found'}
+          </h3>
           <p className="text-sm text-gray-600 mb-4">
-            Your decision tree doesn't contain any tour steps or questions. Please add some nodes to your decision tree first.
+            {databaseTourError || 'Your decision tree doesn\'t contain any tour steps or questions. Please add some nodes to your decision tree first.'}
           </p>
           <div className="flex space-x-3">
             <Button 
               variant="outline" 
               onClick={() => {
                 setUseDatabaseTour(false);
-                closeGuidedTour();
+                setDatabaseTourError(null);
               }}
               className="flex-1"
             >
@@ -518,12 +526,26 @@ export function GuidedTour() {
             </Button>
             <Button 
               onClick={() => {
+                setDatabaseTourError(null);
+                // Clear error and try loading again
+                loadDatabaseTourSteps().catch(error => {
+                  console.error('Manual retry failed:', error);
+                });
+              }}
+              className="flex-1"
+              disabled={isLoadingDatabaseTour}
+            >
+              {isLoadingDatabaseTour ? 'Loading...' : 'Retry'}
+            </Button>
+            <Button 
+              onClick={() => {
                 closeGuidedTour();
                 window.location.href = '/decision-tree';
               }}
+              variant="outline"
               className="flex-1"
             >
-              Edit Decision Tree
+              Edit Tree
             </Button>
           </div>
         </div>
