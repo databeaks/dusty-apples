@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store/appStore';
 import { guidedTourSteps, FormQuestion, FormStep, getRecommendation, DeploymentRecommendation } from '@/lib/data/sampleData';
+import { TourCompletionModal } from './tourCompletionModal';
 import { convertDatabaseToTourSteps, TourStep, TourQuestion } from '@/lib/fastapi';
 import { TourNavigator } from '@/lib/conditionalNavigation';
 import { ConditionalNodeData } from '@/types/api';
@@ -185,6 +186,8 @@ export function GuidedTour() {
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [recommendation, setRecommendation] = useState<DeploymentRecommendation | null>(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [isSavingCompletion, setIsSavingCompletion] = useState(false);
   
   // Get applicable steps based on current answers and tour mode
   const getApplicableSteps = () => {
@@ -395,11 +398,62 @@ export function GuidedTour() {
     }
   };
 
-  const handleComplete = () => {
-    // Here you could save the form data to a backend
+  const handleComplete = async () => {
+    // Save the form data to backend and mark session as completed
     console.log('Form completed with answers:', formAnswers);
-    closeGuidedTour();
-    resetGuidedTour();
+    
+    // Save session as completed if we have a session and not in test mode
+    if (currentSessionId && !isTestMode) {
+      setIsSavingCompletion(true);
+      try {
+        const { updateTourSession } = await import('@/lib/fastapi');
+        
+        // Prepare the Express Setup + Buy with AWS recommendation
+        const expressSetupRecommendation = {
+          id: 'aws-marketplace',
+          title: 'Express Setup + Buy with AWS',
+          qualification: 'Yes',
+          description: 'Set up Express and upgrade using Buy with AWS for marketplace billing.',
+          actions: ['Express setup', 'Upgrade via Buy with AWS', 'Configure workspace'],
+          benefits: [
+            'Consolidated AWS billing',
+            'Use existing AWS credits',
+            'Simplified procurement process',
+            'AWS security compliance',
+            'Familiar AWS marketplace experience'
+          ],
+          nextSteps: [
+            'Visit AWS Marketplace listing',
+            'Complete subscription setup',
+            'Configure workspace settings',
+            'Connect existing AWS resources'
+          ],
+          isAvailable: true
+        };
+        
+        await updateTourSession(currentSessionId, {
+          status: 'completed',
+          progress_percentage: 100,
+          answers: formAnswers,
+          recommendation: expressSetupRecommendation,
+          current_step: 'completed'
+        });
+        
+        console.log('✅ Tour session marked as completed in database');
+      } catch (error) {
+        console.warn('⚠️ Failed to save tour completion to database (tour can continue):', error);
+        // Don't prevent the completion modal from showing even if save fails
+      } finally {
+        setIsSavingCompletion(false);
+      }
+    } else if (isTestMode) {
+      console.log('🧪 Test mode - skipping database save');
+    } else {
+      console.log('ℹ️ No session ID - skipping database save');
+    }
+    
+    // Show completion modal with Express Setup + Buy with AWS recommendation
+    setShowCompletionModal(true);
   };
 
   const handleClose = () => {
@@ -537,6 +591,20 @@ export function GuidedTour() {
         </CardContent>
       </Card>
     );
+  };
+
+  const handleCompletionClose = () => {
+    setShowCompletionModal(false);
+    closeGuidedTour();
+    resetGuidedTour();
+  };
+
+  const handleGetStarted = () => {
+    // Here you could redirect to AWS Marketplace or start setup process
+    console.log('Starting Express Setup + Buy with AWS process...');
+    setShowCompletionModal(false);
+    closeGuidedTour();
+    resetGuidedTour();
   };
 
   // Show loading state for database tour
@@ -817,6 +885,15 @@ export function GuidedTour() {
           </div>
         </div>
       )}
+
+      {/* Completion Modal */}
+      <TourCompletionModal 
+        isOpen={showCompletionModal}
+        onClose={handleCompletionClose}
+        onGetStarted={handleGetStarted}
+        isSaving={isSavingCompletion}
+        showSaveStatus={currentSessionId !== null && !isTestMode}
+      />
     </div>
   );
 }

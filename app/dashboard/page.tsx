@@ -8,6 +8,7 @@ import { dashboardMetrics } from '@/lib/data/sampleData';
 import { TourSession } from '@/types/api';
 import { useState, useEffect } from 'react';
 import { getMyTourSessions } from '@/lib/fastapi';
+import { TourCompletionModal } from '@/components/tourCompletionModal';
 import { 
   MessageSquare, 
   FolderOpen, 
@@ -37,6 +38,8 @@ export default function DashboardPage() {
   const { openGuidedTour } = useAppStore();
   const [tourSessions, setTourSessions] = useState<TourSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<TourSession | null>(null);
 
   // Load tour sessions on component mount
   useEffect(() => {
@@ -117,10 +120,21 @@ export default function DashboardPage() {
   };
 
   const handleViewResults = (session: TourSession) => {
-    // This would navigate to a results page in a real implementation
     console.log('Viewing results for session:', session.id);
-    // For now, just show an alert
-    alert(`Viewing results for tour session: ${session.tree_name}\nStatus: ${session.status}\nProgress: ${session.progress_percentage}%`);
+    setSelectedSession(session);
+    setShowCompletionModal(true);
+  };
+
+  const handleCloseCompletionModal = () => {
+    setShowCompletionModal(false);
+    setSelectedSession(null);
+  };
+
+  const handleGetStarted = () => {
+    // Here you could redirect to AWS Marketplace or start setup process
+    console.log('Starting Express Setup + Buy with AWS process...');
+    setShowCompletionModal(false);
+    setSelectedSession(null);
   };
 
   const refreshTourSessions = async () => {
@@ -363,6 +377,14 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Tour Completion Modal */}
+        <TourCompletionModal 
+          isOpen={showCompletionModal}
+          onClose={handleCloseCompletionModal}
+          onGetStarted={handleGetStarted}
+          session={selectedSession}
+        />
     </div>
   );
 }
