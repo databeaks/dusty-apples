@@ -345,6 +345,50 @@ def init_database():
                 WHERE is_default_for_tour = TRUE
             """)
             
+            # Create tour sessions table for tracking user progress
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tour_sessions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    tree_id UUID REFERENCES decision_trees(id) ON DELETE CASCADE,
+                    user_id VARCHAR(255) NOT NULL,
+                    status VARCHAR(20) NOT NULL CHECK (status IN ('in_progress', 'completed', 'abandoned')),
+                    date_started TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    date_completed TIMESTAMP,
+                    current_step VARCHAR(255),
+                    answers JSONB DEFAULT '{}',
+                    recommendation JSONB,
+                    progress_percentage INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+                    session_state JSONB DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Create indexes for efficient querying
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_tour_sessions_user_id ON tour_sessions (user_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_tour_sessions_tree_id ON tour_sessions (tree_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_tour_sessions_status ON tour_sessions (status)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_tour_sessions_started ON tour_sessions (date_started DESC)")
+            
+            # Create trigger to auto-update updated_at timestamp
+            cur.execute("""
+                CREATE OR REPLACE FUNCTION update_tour_sessions_updated_at()
+                RETURNS TRIGGER AS $$
+                BEGIN
+                    NEW.updated_at = CURRENT_TIMESTAMP;
+                    RETURN NEW;
+                END;
+                $$ language 'plpgsql';
+            """)
+            
+            cur.execute("""
+                DROP TRIGGER IF EXISTS update_tour_sessions_updated_at ON tour_sessions;
+                CREATE TRIGGER update_tour_sessions_updated_at
+                    BEFORE UPDATE ON tour_sessions
+                    FOR EACH ROW
+                    EXECUTE FUNCTION update_tour_sessions_updated_at();
+            """)
+            
             conn.commit()
             logger.info("Database tables initialized successfully")
     except Exception as e:

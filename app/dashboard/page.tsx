@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store/appStore';
 import { dashboardMetrics, sampleTourSessions } from '@/lib/data/sampleData';
 import { TourSession } from '@/types/api';
+import { useState, useEffect } from 'react';
+import { getTourSessionsByUser } from '@/lib/fastapi';
 import { 
   MessageSquare, 
   FolderOpen, 
@@ -20,7 +22,8 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  ExternalLink
+  ExternalLink,
+  RotateCcw
 } from 'lucide-react';
 
 const iconMap = {
@@ -32,6 +35,27 @@ const iconMap = {
 
 export default function DashboardPage() {
   const { openGuidedTour } = useAppStore();
+  const [tourSessions, setTourSessions] = useState<TourSession[]>(sampleTourSessions);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+
+  // Load tour sessions on component mount
+  useEffect(() => {
+    const loadTourSessions = async () => {
+      setIsLoadingSessions(true);
+      try {
+        // In production, this would use the actual user ID
+        const sessions = await getTourSessionsByUser('demo-user', 10);
+        setTourSessions(sessions);
+      } catch (error) {
+        console.warn('Failed to load tour sessions, using sample data:', error);
+        // Keep using sample data if API fails
+      } finally {
+        setIsLoadingSessions(false);
+      }
+    };
+
+    loadTourSessions();
+  }, []);
 
   const getTrendIcon = (trend?: 'up' | 'down' | 'neutral') => {
     switch (trend) {
@@ -96,6 +120,29 @@ export default function DashboardPage() {
     console.log('Viewing results for session:', session.id);
     // For now, just show an alert
     alert(`Viewing results for tour session: ${session.tree_name}\nStatus: ${session.status}\nProgress: ${session.progress_percentage}%`);
+  };
+
+  const refreshTourSessions = async () => {
+    try {
+      const sessions = await getTourSessionsByUser('demo-user', 10);
+      setTourSessions(sessions);
+    } catch (error) {
+      console.warn('Failed to refresh tour sessions:', error);
+    }
+  };
+
+  const handleResumeTour = async (session: TourSession) => {
+    console.log('Resuming tour session:', session.id);
+    
+    try {
+      const { resumeTourFromSession } = useAppStore.getState();
+      await resumeTourFromSession(session.id);
+      // Refresh sessions after resuming
+      await refreshTourSessions();
+    } catch (error) {
+      console.error('Failed to resume tour:', error);
+      alert('Failed to resume tour. Please try again.');
+    }
   };
 
   return (
@@ -179,7 +226,7 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sampleTourSessions.map((session) => (
+                    {tourSessions.map((session) => (
                       <tr key={session.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-4 px-2">
                           <div className="flex items-center">
@@ -233,15 +280,27 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td className="py-4 px-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleViewResults(session)}
-                            className="text-xs"
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            View Results
-                          </Button>
+                          {session.status === 'completed' ? (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleViewResults(session)}
+                              className="text-xs"
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              View Results
+                            </Button>
+                          ) : (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleResumeTour(session)}
+                              className="text-xs text-blue-600 hover:text-blue-700"
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Resume
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -160,6 +160,7 @@ export function GuidedTour() {
     updateFormAnswer,
     resetGuidedTour,
     useDatabaseTour,
+    isTestMode,
     databaseTourSteps,
     databaseConditionalNodes,
     isLoadingDatabaseTour,
@@ -215,7 +216,20 @@ export function GuidedTour() {
   
   // Get current step based on tour mode
   const currentStep = useDatabaseTour ? getCurrentStep() : applicableSteps[currentStepIndex];
-  const isLastStep = useDatabaseTour ? false : currentStepIndex === applicableSteps.length - 1; // For database tours, we don't know if it's the last step
+  
+  // Calculate isLastStep properly for database tours
+  const isLastStep = useDatabaseTour 
+    ? (() => {
+        if (!currentStep) return false;
+        // A step is the last step if it has no nextStepId and no conditional routing
+        // Only check these properties for TourStep (database tour steps)
+        const tourStep = currentStep as TourStep;
+        const hasNextStep = tourStep.nextStepId;
+        const hasConditionalRouting = tourStep.conditionalRouting && tourStep.conditionalRouting.length > 0;
+        return !hasNextStep && !hasConditionalRouting;
+      })()
+    : currentStepIndex === applicableSteps.length - 1;
+    
   const isFirstStep = useDatabaseTour ? currentStepPath.length <= 1 : currentStepIndex === 0;
 
   // Check if a question should be shown based on conditional logic
@@ -261,14 +275,31 @@ export function GuidedTour() {
   };
 
   const handleNext = () => {
+    console.log('🔘 Next button clicked');
+    console.log('📋 Current form answers:', formAnswers);
+    console.log('🎯 Current step index:', currentStepIndex);
+    console.log('🔄 Use database tour:', useDatabaseTour);
+    
     if (validateCurrentStep()) {
+      console.log('✅ Validation passed');
+      
       if (isLastStep) {
-        // Complete the tour
+        console.log('🏁 Last step - completing tour');
         handleComplete();
       } else {
         if (useDatabaseTour) {
           // For database tour, use root-based navigation
           console.log('🔄 Database tour: navigating to next step...');
+          console.log('📍 Current step path:', currentStepPath);
+          
+          const currentStep = getCurrentStep();
+          console.log('📝 Current step details:', {
+            id: currentStep?.id,
+            title: currentStep?.title,
+            conditionalRouting: currentStep?.conditionalRouting?.length || 0,
+            nextStepId: currentStep?.nextStepId
+          });
+          
           const nextStepId = navigateToNextStep();
           
           if (nextStepId) {
@@ -276,9 +307,16 @@ export function GuidedTour() {
             setValidationErrors([]);
           } else {
             // Check if current step has conditional routing - if so, user needs to answer questions
-            const currentStep = getCurrentStep();
             if (currentStep?.conditionalRouting && currentStep.conditionalRouting.length > 0) {
               console.log('⏳ Staying on current step - user needs to answer questions');
+              console.log('🔍 Conditional routing rules:', currentStep.conditionalRouting);
+              
+              // Check which conditions are not met
+              currentStep.conditionalRouting.forEach((routing, index) => {
+                const userAnswer = formAnswers[routing.questionId];
+                console.log(`🔍 Condition ${index + 1}: ${routing.questionId} ${routing.operator} ${routing.value} | User answer: ${userAnswer}`);
+              });
+              
               // Don't complete the tour, just stay on current step
               // The user needs to answer the questions to proceed
             } else {
@@ -289,7 +327,7 @@ export function GuidedTour() {
         } else {
           // For static tour, use the conditional logic
           const allSteps = guidedTourSteps;
-          const currentStepId = currentStep.id;
+          const currentStepId = currentStep?.id;
           const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
           
           // Find next applicable step from the full list
@@ -310,6 +348,9 @@ export function GuidedTour() {
           handleComplete();
         }
       }
+    } else {
+      console.log('❌ Validation failed:', validationErrors);
+      console.log('🔍 Required questions not answered:', visibleQuestions.filter(q => q.required && (!formAnswers[q.id] || (Array.isArray(formAnswers[q.id]) && formAnswers[q.id].length === 0))).map(q => ({ id: q.id, title: q.title })));
     }
   };
 
@@ -328,7 +369,7 @@ export function GuidedTour() {
     } else {
       // For static tour, use the conditional logic
       const allSteps = guidedTourSteps;
-      const currentStepId = currentStep.id;
+      const currentStepId = currentStep?.id;
       const currentFullIndex = allSteps.findIndex(step => step.id === currentStepId);
       
       // Find previous applicable step from the full list
@@ -540,7 +581,6 @@ export function GuidedTour() {
             <Button 
               onClick={() => {
                 closeGuidedTour();
-                window.location.href = '/decision-tree';
               }}
               variant="outline"
               className="flex-1"
@@ -590,25 +630,27 @@ export function GuidedTour() {
               </Button>
               {useDatabaseTour && (
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs text-purple-600 font-medium">
-                    Using Decision Tree
+                  <span className={`text-xs font-medium ${isTestMode ? 'text-orange-600' : 'text-purple-600'}`}>
+                    {isTestMode ? '🧪 Test Mode (No Database)' : 'Using Decision Tree'}
                   </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (!isLoadingDatabaseTour) {
-                        // Reset the tour state and reload fresh data
-                        resetGuidedTour();
-                        loadDatabaseTourSteps();
-                      }
-                    }}
-                    disabled={isLoadingDatabaseTour}
-                    className="text-xs h-6 px-2"
-                    title="Refresh tour with latest decision tree data"
-                  >
-                    {isLoadingDatabaseTour ? "..." : "🔄"}
-                  </Button>
+                  {!isTestMode && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (!isLoadingDatabaseTour) {
+                          // Reset the tour state and reload fresh data
+                          resetGuidedTour();
+                          loadDatabaseTourSteps();
+                        }
+                      }}
+                      disabled={isLoadingDatabaseTour}
+                      className="text-xs h-6 px-2"
+                      title="Refresh tour with latest decision tree data"
+                    >
+                      {isLoadingDatabaseTour ? "..." : "🔄"}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

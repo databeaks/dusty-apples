@@ -5,6 +5,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navigation } from '@/components/navigation';
 import { GuidedTour } from '@/components/guidedTour';
+import { RootStepModal } from '@/components/rootStepModal';
 import { useAppStore } from '@/lib/store/appStore';
 
 const geistSans = Geist({
@@ -25,7 +26,7 @@ function RootLayoutContent({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { isGuidedTourOpen } = useAppStore();
+  const { isGuidedTourOpen, showRootStepModal, setShowRootStepModal } = useAppStore();
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
@@ -34,6 +35,10 @@ function RootLayoutContent({
         {children}
       </div>
       {isGuidedTourOpen && <GuidedTour />}
+      <RootStepModal 
+        isOpen={showRootStepModal}
+        onClose={() => setShowRootStepModal(false)}
+      />
     </div>
   );
 }

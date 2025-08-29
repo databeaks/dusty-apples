@@ -224,42 +224,28 @@ const findStaticTourStepNodes = (
   return staticStepNodesList;
 };
 
-export const convertDatabaseToTourSteps = async (): Promise<{
+// Core conversion logic that can work with any nodes/edges data
+const convertNodesToTourSteps = (data: { nodes: any[]; edges: any[] }): {
   steps: TourStep[];
   conditionalNodes: any[];
-}> => {
-  try {
-    console.log('Starting conversion of database to tour steps...');
-    
-    // Get the default tour tree
-    const defaultTreeResponse = await getDefaultTourTree();
-    if (!defaultTreeResponse.default_tree) {
-      throw new Error('No default decision tree set for guided tours. Please set a default tree first.');
-    }
-    
-    console.log('Using default tour tree:', defaultTreeResponse.default_tree.name);
-    
-    // Get the specific decision tree data
-    const treeResponse = await getDecisionTreeById(defaultTreeResponse.default_tree.id);
-    const data = { nodes: treeResponse.nodes, edges: treeResponse.edges };
-    
-    if (!data || !data.nodes || !data.edges) {
-      throw new Error('Invalid decision tree data');
-    }
+} => {
+  if (!data || !data.nodes || !data.edges) {
+    throw new Error('Invalid decision tree data');
+  }
 
-    console.log('Converting database to tour steps:', { 
-      nodeCount: data.nodes.length, 
-      edgeCount: data.edges.length 
-    });
+  console.log('Converting nodes to tour steps:', { 
+    nodeCount: data.nodes.length, 
+    edgeCount: data.edges.length 
+  });
 
-    // Group nodes by type
-    const stepNodes = data.nodes.filter((node: any) => node.type === 'tourStep');
-    const questionNodes = data.nodes.filter((node: any) => node.type === 'question');
-    const conditionalNodes = data.nodes.filter((node: any) => node.type === 'conditional');
-    
-    // Find root node
-    const rootNode = stepNodes.find((node: any) => node.data?.isRoot === true || node.isRoot === true);
-    console.log('Root node found:', rootNode ? rootNode.id : 'None');
+  // Group nodes by type
+  const stepNodes = data.nodes.filter((node: any) => node.type === 'tourStep');
+  const questionNodes = data.nodes.filter((node: any) => node.type === 'question');
+  const conditionalNodes = data.nodes.filter((node: any) => node.type === 'conditional');
+  
+  // Find root node
+  const rootNode = stepNodes.find((node: any) => node.data?.isRoot === true || node.isRoot === true);
+  console.log('Root node found:', rootNode ? rootNode.id : 'None');
     
     console.log('Node distribution:', { 
       stepNodes: stepNodes.length, 
@@ -328,7 +314,7 @@ export const convertDatabaseToTourSteps = async (): Promise<{
         // Check if this is the root node
         const isRoot = nodeData.isRoot === true || node.isRoot === true;
         
-        // Find next step connections
+        // Find next step connections (direct step-to-step connections)
         const nextStepConnections = connectedEdges
           .filter((edge: any) => stepNodes.some((s: any) => s.id === edge.target))
           .map((edge: any) => edge.target);
@@ -336,6 +322,21 @@ export const convertDatabaseToTourSteps = async (): Promise<{
         // Find conditional connections
         const conditionalConnections = connectedEdges
           .filter((edge: any) => conditionalNodes.some((c: any) => c.id === edge.target));
+        
+        // If no direct step connections, try to find the next step through the graph
+        let inferredNextStepId: string | undefined = undefined;
+        if (nextStepConnections.length === 0 && conditionalConnections.length === 0) {
+          // This step has no outgoing connections - it might be a terminal step
+          // Or it might be connected through questions - let's check
+          const questionConnections = connectedEdges
+            .filter((edge: any) => questionNodes.some((q: any) => q.id === edge.target));
+          
+          if (questionConnections.length > 0) {
+            // This step connects to questions - for now, we'll leave nextStepId undefined
+            // The user will need to answer questions to proceed via conditional routing
+            console.log(`📝 Step ${node.id} connects to questions, no direct next step`);
+          }
+        }
         
         const conditionalRouting: ConditionalRouting[] = [];
         conditionalConnections.forEach((edge: any) => {
@@ -365,7 +366,7 @@ export const convertDatabaseToTourSteps = async (): Promise<{
           description: nodeData.description || 'Please complete the questions below.',
           questions: connectedQuestions,
           isRoot,
-          nextStepId: nextStepConnections[0] || undefined,
+          nextStepId: nextStepConnections[0] || inferredNextStepId,
           conditionalRouting: conditionalRouting.length > 0 ? conditionalRouting : undefined,
           target: nodeData.target,
           placement: nodeData.placement,
@@ -523,10 +524,46 @@ export const convertDatabaseToTourSteps = async (): Promise<{
       ...node.data
     }));
 
-    return {
-      steps: tourSteps,
-      conditionalNodes: conditionalData
-    };
+  return {
+    steps: tourSteps,
+    conditionalNodes: conditionalData
+  };
+};
+
+// Convert current editor state to tour steps (for testing)
+export const convertEditorToTourSteps = (nodes: any[], edges: any[]): {
+  steps: TourStep[];
+  conditionalNodes: any[];
+} => {
+  console.log('🧪 Converting current editor state to tour steps...');
+  return convertNodesToTourSteps({ nodes, edges });
+};
+
+// Convert database decision tree to tour steps (for production)
+export const convertDatabaseToTourSteps = async (): Promise<{
+  steps: TourStep[];
+  conditionalNodes: any[];
+}> => {
+  try {
+    console.log('Starting conversion of database to tour steps...');
+    
+    // Get the default tour tree
+    const defaultTreeResponse = await getDefaultTourTree();
+    if (!defaultTreeResponse.default_tree) {
+      throw new Error('No default decision tree set for guided tours. Please set a default tree first.');
+    }
+    
+    console.log('Using default tour tree:', defaultTreeResponse.default_tree.name);
+    
+    // Get the specific decision tree data
+    const treeResponse = await getDecisionTreeById(defaultTreeResponse.default_tree.id);
+    const data = { nodes: treeResponse.nodes, edges: treeResponse.edges };
+    
+    if (!data || !data.nodes || !data.edges) {
+      throw new Error('Invalid decision tree data');
+    }
+
+    return convertNodesToTourSteps(data);
   } catch (error) {
     console.error('Failed to convert database to tour steps:', error);
     throw error;
@@ -577,4 +614,31 @@ export const getDefaultTourTree = async (): Promise<DefaultTourTreeResponse> => 
 export const setDefaultTourTree = async (treeId: string): Promise<{ message: string; tree_id: string }> => {
   const response = await api.post(`/decision-trees/${treeId}/set-default-for-tour`);
   return response.data;
+};
+
+// Tour Session Management
+import type { TourSession, TourSessionCreateRequest, TourSessionUpdateRequest } from '@/types/api';
+
+export const createTourSession = async (request: TourSessionCreateRequest): Promise<TourSession> => {
+  const response = await api.post("/tour-sessions/", request);
+  return response.data;
+};
+
+export const getTourSessionsByUser = async (userId: string, limit: number = 10): Promise<TourSession[]> => {
+  const response = await api.get(`/tour-sessions/user/${userId}?limit=${limit}`);
+  return response.data;
+};
+
+export const getTourSession = async (sessionId: string): Promise<TourSession> => {
+  const response = await api.get(`/tour-sessions/${sessionId}`);
+  return response.data;
+};
+
+export const updateTourSession = async (sessionId: string, request: TourSessionUpdateRequest): Promise<TourSession> => {
+  const response = await api.put(`/tour-sessions/${sessionId}`, request);
+  return response.data;
+};
+
+export const deleteTourSession = async (sessionId: string): Promise<void> => {
+  await api.delete(`/tour-sessions/${sessionId}`);
 };

@@ -43,6 +43,7 @@ import {
 import { ConditionalNode } from './conditionalNode';
 import { ConditionalNodeEditor } from './conditionalNodeEditor';
 import { RootNodeManager } from './rootNodeManager';
+
 import { ConditionalNodeData, RootValidationResult } from '@/types/api';
 import { validateConnection } from '@/lib/conditionalNavigation';
 
@@ -1420,29 +1421,52 @@ export function DecisionTree() {
           <div className="bg-white p-2 rounded-lg shadow-lg border w-48">
             <div className="text-xs font-medium text-gray-700 mb-2">Tour Integration</div>
             <Button 
+              title="Test the current tour using the nodes and connections you've created in this editor (unsaved changes included). Runs in test mode - no database sessions created."
               onClick={async () => {
                 try {
-                  // Load and enable database tour mode
-                  const { setUseDatabaseTour, loadDatabaseTourSteps, openGuidedTour } = useAppStore.getState();
-                  setUseDatabaseTour(true);
-                  await loadDatabaseTourSteps();
+                  // Load and enable tour mode using current editor state
+                  const { loadEditorTourSteps, openTestTour, setShowRootStepModal } = useAppStore.getState();
                   
-                  // Navigate to home page and open tour
-                  router.push('/');
+                  // Convert current ReactFlow nodes/edges to the format expected by the conversion function
+                  const currentNodes = nodes.map(node => ({
+                    id: node.id,
+                    type: node.type,
+                    data: node.data,
+                    isRoot: node.data?.isRoot
+                  }));
                   
-                  // Small delay to ensure navigation completes before opening tour
-                  setTimeout(() => {
-                    openGuidedTour();
-                  }, 100);
+                  const currentEdges = edges.map(edge => ({
+                    id: edge.id,
+                    source: edge.source,
+                    target: edge.target,
+                    type: edge.type
+                  }));
+                  
+                  console.log('🧪 Testing current editor state:', {
+                    nodes: currentNodes.length,
+                    edges: currentEdges.length
+                  });
+                  
+                  // Check for root step before doing anything else
+                  const hasRootStep = currentNodes.some(node => node.data?.isRoot === true);
+                  if (!hasRootStep) {
+                    console.log('🚨 No root step found - showing modal (staying in editor)');
+                    setShowRootStepModal(true);
+                    return; // Don't navigate away, just show modal
+                  }
+                  
+                  await loadEditorTourSteps(currentNodes, currentEdges);
+                  
+                  // Open test tour directly on current page (no navigation needed)
+                  openTestTour();
                 } catch (error) {
-                  console.error('Failed to start database tour:', error);
-                  alert('Failed to start database tour. Please ensure you have nodes in your decision tree.');
+                  console.error('Failed to load editor tour steps:', error);
+                  alert('Failed to load current tour data. Please ensure you have nodes in your decision tree.');
                 }
               }}
               className="shadow-lg bg-purple-600 hover:bg-purple-700 w-full text-xs py-2"
             >
-              <GitBranch className="h-3 w-3 mr-1" />
-              Test Database Tour
+              🧪 Test Current Tour
             </Button>
           </div>
         </Panel>

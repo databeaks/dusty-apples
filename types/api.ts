@@ -152,4 +152,25 @@ export interface TourSession {
   answers: Record<string, any>;
   recommendation?: any;
   progress_percentage: number;
+  session_state?: Record<string, any>;
+}
+
+// Tour Session Management Types
+export interface TourSessionCreateRequest {
+  tree_id: string;
+  user_id: string;
+  current_step?: string;
+}
+
+export interface TourSessionUpdateRequest {
+  status?: 'in_progress' | 'completed' | 'abandoned';
+  current_step?: string;
+  answers?: Record<string, any>;
+  recommendation?: any;
+  progress_percentage?: number;
+  session_state?: Record<string, any>;
+}
+
+export interface TourSessionListResponse {
+  sessions: TourSession[];
 }

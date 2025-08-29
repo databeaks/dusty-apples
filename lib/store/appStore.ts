@@ -25,6 +25,9 @@ interface AppStore {
   formAnswers: FormAnswers;
   isGuidedTourOpen: boolean;
   useDatabaseTour: boolean;
+  isTestMode: boolean; // Flag to indicate if this is a test tour (no database sessions)
+  showRootStepModal: boolean; // Flag to show the root step modal
+  tourReturnPath: string | null; // Path to return to when tour is completed/closed
   databaseTourSteps: TourStep[];
   databaseConditionalNodes: ConditionalNodeData[];
   isLoadingDatabaseTour: boolean;
@@ -40,6 +43,7 @@ interface AppStore {
   updateFormAnswer: (questionId: string, value: string | string[]) => void;
   resetGuidedTour: () => void;
   openGuidedTour: () => Promise<void>;
+  openTestTour: () => Promise<void>; // Open tour in test mode (no database sessions)
   closeGuidedTour: () => void;
   nextStep: () => void;
   previousStep: () => void;
@@ -53,7 +57,16 @@ interface AppStore {
   setDatabaseConditionalNodes: (nodes: ConditionalNodeData[]) => void;
   setIsLoadingDatabaseTour: (loading: boolean) => void;
   setDatabaseTourError: (error: string | null) => void;
+  setShowRootStepModal: (show: boolean) => void;
   loadDatabaseTourSteps: () => Promise<void>;
+  loadEditorTourSteps: (nodes: any[], edges: any[]) => Promise<void>;
+  
+  // Session management
+  currentSessionId: string | null;
+  setCurrentSessionId: (sessionId: string | null) => void;
+  saveSessionState: () => Promise<void>;
+  loadSessionState: (sessionId: string) => Promise<void>;
+  resumeTourFromSession: (sessionId: string) => Promise<void>;
   
   // Root-based navigation actions
   initializeTourFromRoot: () => Promise<void>;
@@ -79,6 +92,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   formAnswers: {},
   isGuidedTourOpen: false,
   useDatabaseTour: false,
+  isTestMode: false,
+  showRootStepModal: false,
+  tourReturnPath: null,
   databaseTourSteps: [],
   databaseConditionalNodes: [],
   isLoadingDatabaseTour: false,
@@ -88,6 +104,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   tourFlow: null,
   currentStepPath: [],
   rootStepId: null,
+  
+  // Session management initial state
+  currentSessionId: null,
   
   // Navigation actions
   setCurrentView: (view) => set({ currentView: view }),
@@ -100,16 +119,28 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // Guided tour actions
   setCurrentStepIndex: (index) => set({ currentStepIndex: index }),
   
-  updateFormAnswer: (questionId, value) =>
+  updateFormAnswer: (questionId, value) => {
     set((state) => ({
       formAnswers: { ...state.formAnswers, [questionId]: value },
-    })),
+    }));
+    
+    // Auto-save session state after form answer update (debounced)
+    // Skip auto-save if in test mode
+    const { currentSessionId, isTestMode } = get();
+    if (currentSessionId && !isTestMode) {
+      // Debounce the auto-save to avoid too many API calls
+      setTimeout(() => {
+        get().saveSessionState();
+      }, 500);
+    }
+  },
   
   resetGuidedTour: () =>
     set({
       currentStepIndex: 0,
       formAnswers: {},
       isGuidedTourOpen: false,
+      showRootStepModal: false, // Close modal when resetting
     }),
   
   openGuidedTour: async () => {
@@ -118,7 +149,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ 
         useDatabaseTour: true,
         isLoadingDatabaseTour: true,
-        databaseTourError: null
+        databaseTourError: null,
+        tourReturnPath: null // Regular tours return to home
       });
       
       console.log('🚀 Starting guided tour with default decision tree...');
@@ -126,6 +158,27 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // Load the default decision tree tour steps
       const { loadDatabaseTourSteps } = get();
       await loadDatabaseTourSteps();
+      
+      // Get default tree and create a session
+      try {
+        const { getDefaultTourTree, createTourSession } = await import('@/lib/fastapi');
+        const defaultTreeResponse = await getDefaultTourTree();
+        
+        if (defaultTreeResponse.default_tree) {
+          // Create a new tour session
+          const session = await createTourSession({
+            tree_id: defaultTreeResponse.default_tree.id,
+            user_id: 'demo-user', // In production, this would be the actual user ID
+            current_step: get().rootStepId || undefined
+          });
+          
+          set({ currentSessionId: session.id });
+          console.log('✅ Tour session created:', session.id);
+        }
+      } catch (error) {
+        console.warn('Failed to create tour session:', error);
+        // Continue without session tracking
+      }
       
       // Open the guided tour
       set({ 
@@ -138,23 +191,99 @@ export const useAppStore = create<AppStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to start guided tour with default decision tree:', error);
       
-      // Fallback to static tour if database tour fails
+      // Handle specific error cases
+      if (error instanceof Error && error.message === 'NO_ROOT_STEP') {
+        const friendlyMessage = 'No root step found in the decision tree. Please set a root step in the decision tree editor.';
+        set({ 
+          isLoadingDatabaseTour: false,
+          databaseTourError: friendlyMessage,
+          isGuidedTourOpen: false // Don't open tour on error
+        });
+        return; // Don't fallback to static tour for root step errors
+      }
+      
+      // Fallback to static tour if database tour fails (for other errors)
       console.log('📋 Falling back to static tour due to error:', error);
       set({ 
         useDatabaseTour: false,
         isGuidedTourOpen: true,
         currentView: 'guided-tour',
         isLoadingDatabaseTour: false,
-        databaseTourError: null // Clear error when falling back
+        databaseTourError: null, // Clear error when falling back
+        currentSessionId: null // Clear session ID on fallback
       });
     }
   },
+
+  openTestTour: async () => {
+    try {
+      console.log('🧪 Starting test tour (no database sessions)...');
+      
+      // Set test mode and open the guided tour
+      set({ 
+        useDatabaseTour: true,
+        isTestMode: true, // This is a test tour - no sessions
+        isGuidedTourOpen: true,
+        currentView: 'guided-tour',
+        currentSessionId: null, // Ensure no session ID
+        databaseTourError: null,
+        tourReturnPath: null // No navigation needed - tour opens as overlay on current page
+      });
+      
+      // Initialize root-based tour if we have tour steps loaded
+      const { databaseTourSteps, initializeTourFromRoot } = get();
+      if (databaseTourSteps.length > 0) {
+        await initializeTourFromRoot();
+      }
+      
+      console.log('✅ Test tour started (no database interaction)');
+      
+    } catch (error) {
+      console.error('Failed to start test tour:', error);
+      
+      // Handle specific error cases
+      if (error instanceof Error && error.message === 'NO_ROOT_STEP') {
+        // This should not happen anymore since we check before calling openTestTour
+        console.warn('🚨 Unexpected NO_ROOT_STEP error in openTestTour - this should be caught earlier');
+        set({ 
+          isLoadingDatabaseTour: false,
+          databaseTourError: null,
+          isTestMode: false,
+          isGuidedTourOpen: false,
+          showRootStepModal: true
+        });
+        return;
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Failed to start test tour';
+      set({ 
+        isLoadingDatabaseTour: false,
+        databaseTourError: errorMessage,
+        isTestMode: false, // Reset test mode on error
+        isGuidedTourOpen: false // Don't open tour on error
+      });
+      throw error;
+    }
+  },
   
-  closeGuidedTour: () =>
+  closeGuidedTour: () => {
+    const { tourReturnPath } = get();
+    
     set({
       isGuidedTourOpen: false,
-      currentView: 'home',
-    }),
+      currentView: tourReturnPath === '/decision-tree' ? 'decision-tree-editor' : 'home',
+      isTestMode: false, // Reset test mode when closing
+      currentSessionId: null, // Clear any session ID
+      showRootStepModal: false, // Close modal when closing tour
+      tourReturnPath: null, // Clear return path
+    });
+    
+    // Navigate to the return path if it's set (for regular tours that need navigation)
+    // Test tours with tourReturnPath=null will stay on current page
+    if (tourReturnPath && typeof window !== 'undefined') {
+      window.location.href = tourReturnPath;
+    }
+  },
   
   nextStep: () =>
     set((state) => ({
@@ -185,6 +314,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   
   setDatabaseTourError: (error) => set({ databaseTourError: error }),
   
+  setShowRootStepModal: (show) => set({ showRootStepModal: show }),
+  
   loadDatabaseTourSteps: async () => {
     const { convertDatabaseToTourSteps } = await import('@/lib/fastapi');
     set({ isLoadingDatabaseTour: true, databaseTourError: null });
@@ -203,6 +334,33 @@ export const useAppStore = create<AppStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to load database tour steps:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to load tour data';
+      set({ 
+        isLoadingDatabaseTour: false,
+        databaseTourError: errorMessage
+      });
+      // Re-throw the error so openGuidedTour knows it failed
+      throw error;
+    }
+  },
+
+  loadEditorTourSteps: async (nodes: any[], edges: any[]) => {
+    const { convertEditorToTourSteps } = await import('@/lib/fastapi');
+    set({ isLoadingDatabaseTour: true, databaseTourError: null });
+    try {
+      const result = convertEditorToTourSteps(nodes, edges);
+      set({ 
+        databaseTourSteps: result.steps, 
+        databaseConditionalNodes: result.conditionalNodes,
+        isLoadingDatabaseTour: false,
+        databaseTourError: null
+      });
+      console.log('🧪 Editor tour data loaded successfully:', {
+        steps: result.steps.length,
+        conditionalNodes: result.conditionalNodes.length
+      });
+    } catch (error) {
+      console.error('Failed to load editor tour steps:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load editor tour data';
       set({ 
         isLoadingDatabaseTour: false,
         databaseTourError: errorMessage
@@ -239,7 +397,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Find root step
     const rootStep = mainTourSteps.find(step => step.isRoot === true);
     if (!rootStep) {
-      throw new Error('No root step found in main tour data');
+      throw new Error('NO_ROOT_STEP');
     }
     
     // Build tour flow (simplified for now - could be enhanced with full graph analysis)
@@ -293,6 +451,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
     
     console.log('✅ Tour initialized with root:', rootStep.id);
+    console.log('🎯 Initial state:', {
+      currentStepIndex: 0,
+      currentStepPath: [rootStep.id],
+      totalSteps: allSteps.length,
+      mainSteps: mainTourSteps.length,
+      conditionalSteps: conditionalOnlySteps.length
+    });
   },
   
   navigateToNextStep: () => {
@@ -370,6 +535,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
             currentStepPath: [...state.currentStepPath, nextStepId],
             currentStepIndex: state.currentStepIndex + 1
           }));
+          
+          // Auto-save session state only if we have a session and not in test mode
+          const { currentSessionId, isTestMode } = get();
+          if (currentSessionId && !isTestMode) {
+            get().saveSessionState();
+          }
+          
           return nextStepId;
         }
       }
@@ -397,6 +569,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
         currentStepPath: [...state.currentStepPath, nextStepId],
         currentStepIndex: state.currentStepIndex + 1
       }));
+      
+      // Auto-save session state only if we have a session and not in test mode
+      const { currentSessionId, isTestMode } = get();
+      if (currentSessionId && !isTestMode) {
+        get().saveSessionState();
+      }
+      
       return nextStepId;
     }
     
@@ -415,6 +594,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
       currentStepPath: newPath,
       currentStepIndex: Math.max(0, state.currentStepIndex - 1)
     }));
+    
+    // Auto-save session state only if we have a session and not in test mode
+    const { currentSessionId, isTestMode } = get();
+    if (currentSessionId && !isTestMode) {
+      get().saveSessionState();
+    }
     
     return previousStepId;
   },
@@ -495,5 +680,130 @@ export const useAppStore = create<AppStore>((set, get) => ({
   getConditionalSteps: () => {
     const { databaseTourSteps } = get();
     return databaseTourSteps.filter(step => step.isConditionalOnly === true);
+  },
+  
+  // Session management implementation
+  setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId }),
+  
+  saveSessionState: async () => {
+    const { 
+      currentSessionId, 
+      currentStepIndex, 
+      currentStepPath, 
+      formAnswers, 
+      getCurrentStep,
+      databaseTourSteps
+    } = get();
+    
+    if (!currentSessionId) {
+      console.log('No session ID - skipping session save');
+      return;
+    }
+    
+    const currentStep = getCurrentStep();
+    const sessionState = {
+      currentStepIndex,
+      currentStepPath,
+      formAnswers,
+      timestamp: new Date().toISOString()
+    };
+    
+    try {
+      const { updateTourSession } = await import('@/lib/fastapi');
+      await updateTourSession(currentSessionId, {
+        current_step: currentStep?.id,
+        answers: formAnswers,
+        session_state: sessionState,
+        progress_percentage: Math.round((currentStepIndex / Math.max(databaseTourSteps.length, 1)) * 100)
+      });
+      console.log('✅ Session state saved successfully');
+    } catch (error) {
+      console.warn('⚠️ Failed to save session state (tour can continue):', error);
+      // Don't throw error - allow tour to continue even if save fails
+    }
+  },
+  
+  loadSessionState: async (sessionId: string) => {
+    try {
+      const { getTourSession } = await import('@/lib/fastapi');
+      const session = await getTourSession(sessionId);
+      
+      if (session.session_state) {
+        const {
+          currentStepIndex = 0,
+          currentStepPath = [],
+          formAnswers = {}
+        } = session.session_state;
+        
+        set({
+          currentSessionId: sessionId,
+          currentStepIndex,
+          currentStepPath,
+          formAnswers,
+          isGuidedTourOpen: true,
+          currentView: 'guided-tour',
+          useDatabaseTour: true
+        });
+        
+        console.log('Session state loaded successfully:', session.id);
+      } else {
+        // No session state, start fresh but mark the session
+        set({
+          currentSessionId: sessionId,
+          currentStepIndex: 0,
+          formAnswers: session.answers || {},
+          isGuidedTourOpen: true,
+          currentView: 'guided-tour',
+          useDatabaseTour: true
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load session state:', error);
+      throw error;
+    }
+  },
+  
+  resumeTourFromSession: async (sessionId: string) => {
+    try {
+      const { getTourSession } = await import('@/lib/fastapi');
+      const session = await getTourSession(sessionId);
+      
+      // Load database tour steps if not already loaded
+      const { databaseTourSteps, loadDatabaseTourSteps } = get();
+      if (databaseTourSteps.length === 0) {
+        await loadDatabaseTourSteps();
+      }
+      
+      if (session.status === 'abandoned') {
+        // For abandoned tours, start from beginning but keep session ID
+        console.log('Resuming abandoned tour from beginning');
+        await get().initializeTourFromRoot();
+        set({
+          currentSessionId: sessionId,
+          formAnswers: {}, // Clear previous answers for fresh start
+          isGuidedTourOpen: true,
+          currentView: 'guided-tour'
+        });
+        
+        // Update session status to in_progress
+        const { updateTourSession } = await import('@/lib/fastapi');
+        await updateTourSession(sessionId, {
+          status: 'in_progress',
+          progress_percentage: 0,
+          answers: {},
+          session_state: {}
+        });
+      } else if (session.status === 'in_progress') {
+        // For in-progress tours, resume from saved state
+        console.log('Resuming in-progress tour from saved state');
+        await get().initializeTourFromRoot();
+        await get().loadSessionState(sessionId);
+      }
+      
+      console.log('Tour resumed successfully for session:', sessionId);
+    } catch (error) {
+      console.error('Failed to resume tour:', error);
+      throw error;
+    }
   },
 }));

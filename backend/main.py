@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 # Import our modules
 from backend.database import init_database
-from backend.routers import basic, decision_tree, decision_trees
+from backend.routers import basic, decision_tree, decision_trees, tour_sessions
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -42,6 +42,7 @@ app.add_middleware(
 app.include_router(basic.router)
 app.include_router(decision_tree.router)
 app.include_router(decision_trees.router)
+app.include_router(tour_sessions.router)
 
 # Initialize database on startup
 @app.on_event("startup")
