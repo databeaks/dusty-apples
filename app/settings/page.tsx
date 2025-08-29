@@ -133,7 +133,7 @@ export default function SettingsPage() {
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="flex items-center space-x-2 text-gray-500">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-500"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
             <span>Loading...</span>
           </div>
         </div>
@@ -152,7 +152,7 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-            <Settings className="h-8 w-8 mr-3 text-blue-600" />
+            <Settings className="h-8 w-8 mr-3 text-red-600" />
             Settings
           </h1>
           <p className="mt-2 text-gray-600">Manage users and system settings</p>
@@ -171,7 +171,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
-            <UserCheck className="h-5 w-5 mr-2" />
+            <UserCheck className="h-5 w-5 mr-2 text-red-600" />
             User Management
           </CardTitle>
           <CardDescription>
@@ -205,7 +205,7 @@ export default function SettingsPage() {
           {isLoadingUsers && (
             <div className="flex items-center justify-center py-8">
               <div className="flex items-center space-x-2 text-gray-500">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
                 <span>Loading users...</span>
               </div>
             </div>
@@ -231,15 +231,15 @@ export default function SettingsPage() {
                       <td className="py-4 px-2">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 mr-3">
-                            <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                              <UserIcon className="h-4 w-4 text-blue-600" />
+                            <div className="h-8 w-8 bg-red-50 rounded-full flex items-center justify-center">
+                              <UserIcon className="h-4 w-4 text-red-600" />
                             </div>
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">
                               {user.name || user.username}
                               {user.username === currentUser?.username && (
-                                <span className="ml-2 text-xs text-blue-600">(You)</span>
+                                <span className="ml-2 text-xs text-red-600">(You)</span>
                               )}
                             </p>
                             <p className="text-xs text-gray-500">@{user.username}</p>
@@ -267,7 +267,11 @@ export default function SettingsPage() {
                       <td className="py-4 px-2">
                         <Badge 
                           variant={user.role === 'admin' ? 'default' : 'secondary'}
-                          className="flex items-center"
+                          className={`flex items-center ${
+                            user.role === 'admin' 
+                              ? 'bg-red-600 hover:bg-red-700' 
+                              : ''
+                          }`}
                         >
                           {user.role === 'admin' && <Shield className="h-3 w-3 mr-1" />}
                           {user.role}
@@ -285,7 +289,7 @@ export default function SettingsPage() {
                           className="text-xs"
                         >
                           {updatingUsers.has(user.username) ? (
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500"></div>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
                           ) : user.role === 'admin' ? (
                             'Remove Admin'
                           ) : (
@@ -332,13 +336,13 @@ export default function SettingsPage() {
                   <div className="text-xs text-gray-500">Total Users</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-blue-600">
+                  <div className="text-2xl font-bold text-red-600">
                     {users.filter(u => u.role === 'admin').length}
                   </div>
                   <div className="text-xs text-gray-500">Admins</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-gray-600">
+                  <div className="text-2xl font-bold text-orange-500">
                     {users.filter(u => u.role === 'user').length}
                   </div>
                   <div className="text-xs text-gray-500">Users</div>

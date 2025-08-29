@@ -103,7 +103,7 @@ export function Navigation() {
                   ) : currentUser?.name || currentUser?.username || currentUser?.email || 'Unknown User'}
                 </span>
                 {currentUser && isAdmin() && (
-                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gradient-to-r from-red-500 to-orange-500 text-white">
                     <Settings className="w-3 h-3 mr-1" />
                     Admin
                   </span>
