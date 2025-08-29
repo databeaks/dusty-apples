@@ -28,12 +28,13 @@ export function Navigation() {
   const baseNavItems = [
     { id: 'home', label: 'Home', icon: Home, path: '/', isView: true },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard', isView: true },
-    { id: 'decision-tree-list', label: 'Decision Tree', icon: GitBranch, path: '/decision-tree', isView: true },
   ];
 
-  // Add settings for admin users only
+  // Add decision tree and settings for admin users only
   const navItems = currentUser && isAdmin() 
-    ? [...baseNavItems, { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', isView: true }]
+    ? [...baseNavItems, 
+       { id: 'decision-tree-list', label: 'Decision Tree', icon: GitBranch, path: '/decision-tree', isView: true },
+       { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', isView: true }]
     : baseNavItems;
 
   return (
