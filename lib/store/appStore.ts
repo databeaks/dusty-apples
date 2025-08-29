@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { TourStep, ConditionalRouting } from '@/lib/fastapi';
-import { ConditionalNodeData, TourFlow, RootValidationResult, DecisionTreeMetadata } from '@/types/api';
+import { ConditionalNodeData, TourFlow, RootValidationResult, DecisionTreeMetadata, User } from '@/types/api';
 import { RootTourNavigator } from '@/lib/conditionalNavigation';
 
 export interface FormAnswers {
@@ -8,9 +8,16 @@ export interface FormAnswers {
 }
 
 interface AppStore {
-  // Navigation state
-  currentView: 'home' | 'dashboard' | 'guided-tour' | 'decision-tree-list' | 'decision-tree-editor';
-  setCurrentView: (view: 'home' | 'dashboard' | 'guided-tour' | 'decision-tree-list' | 'decision-tree-editor') => void;
+  // User authentication state
+  currentUser: User | null;
+  isLoadingUser: boolean;
+  userError: string | null;
+  
+  // User actions
+  setCurrentUser: (user: User | null) => void;
+  loadCurrentUser: () => Promise<void>;
+  clearUser: () => void;
+  isAdmin: () => boolean;
   
   // Decision Tree Management state
   currentDecisionTree: DecisionTreeMetadata | null;
@@ -86,8 +93,10 @@ interface AppStore {
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  // Initial state
-  currentView: 'home',
+  // User authentication initial state
+  currentUser: null,
+  isLoadingUser: false,
+  userError: null,
   
   // Decision Tree Management initial state
   currentDecisionTree: null,
@@ -114,8 +123,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // Session management initial state
   currentSessionId: null,
   
-  // Navigation actions
-  setCurrentView: (view) => set({ currentView: view }),
+  // User authentication actions
+  setCurrentUser: (user) => set({ currentUser: user, userError: null }),
+  
+  loadCurrentUser: async () => {
+    set({ isLoadingUser: true, userError: null });
+    try {
+      const { getCurrentUser } = await import('@/lib/fastapi');
+      const user = await getCurrentUser();
+      set({ currentUser: user, isLoadingUser: false, userError: null });
+    } catch (error) {
+      console.error('Failed to load current user:', error);
+      set({ 
+        currentUser: null, 
+        isLoadingUser: false, 
+        userError: error instanceof Error ? error.message : 'Failed to load user' 
+      });
+    }
+  },
+  
+  clearUser: () => set({ currentUser: null, userError: null }),
+  
+  isAdmin: () => {
+    const { currentUser } = get();
+    return currentUser?.role === 'admin';
+  },
   
   // Decision Tree Management actions
   setCurrentDecisionTree: (tree) => set({ currentDecisionTree: tree }),
@@ -176,7 +208,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
           // Create a new tour session
           const session = await createTourSession({
             tree_id: defaultTreeResponse.default_tree.id,
-            user_id: 'demo-user', // In production, this would be the actual user ID
             current_step: get().rootStepId || undefined
           });
           
@@ -190,8 +221,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       
       // Open the guided tour
       set({ 
-        isGuidedTourOpen: true,
-        currentView: 'guided-tour'
+        isGuidedTourOpen: true
       });
       
       console.log('✅ Guided tour started with default decision tree');
@@ -215,7 +245,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ 
         useDatabaseTour: false,
         isGuidedTourOpen: true,
-        currentView: 'guided-tour',
         isLoadingDatabaseTour: false,
         databaseTourError: null, // Clear error when falling back
         currentSessionId: null // Clear session ID on fallback
@@ -232,7 +261,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
         useDatabaseTour: true,
         isTestMode: true, // This is a test tour - no sessions
         isGuidedTourOpen: true,
-        currentView: 'guided-tour',
         currentSessionId: null, // Ensure no session ID
         databaseTourError: null,
         tourReturnPath: null // No navigation needed - tour opens as overlay on current page
@@ -279,7 +307,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     
     set({
       isGuidedTourOpen: false,
-      currentView: tourReturnPath === '/decision-tree' ? 'decision-tree-editor' : 'home',
       isTestMode: false, // Reset test mode when closing
       currentSessionId: null, // Clear any session ID
       showRootStepModal: false, // Close modal when closing tour
@@ -799,7 +826,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
           currentStepPath,
           formAnswers,
           isGuidedTourOpen: true,
-          currentView: 'guided-tour',
           useDatabaseTour: true
         });
         
@@ -811,7 +837,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
           currentStepIndex: 0,
           formAnswers: session.answers || {},
           isGuidedTourOpen: true,
-          currentView: 'guided-tour',
           useDatabaseTour: true
         });
       }
@@ -839,8 +864,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set({
           currentSessionId: sessionId,
           formAnswers: {}, // Clear previous answers for fresh start
-          isGuidedTourOpen: true,
-          currentView: 'guided-tour'
+          isGuidedTourOpen: true
         });
         
         // Update session status to in_progress

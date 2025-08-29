@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uuid
 import json
 from backend.database import get_db_connection
+from backend.routers.users import get_or_create_user, UserResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,9 +15,53 @@ router = APIRouter(
     tags=["tour-sessions"]
 )
 
+def ensure_user_exists(request: Request) -> str:
+    """Ensure user exists in database and return username"""
+    from backend.routers.users import extract_user_info
+    
+    user_info = extract_user_info(request)
+    username = user_info["username"]
+    
+    if not username or username == "anonymous":
+        logger.warning("Anonymous user attempting to access tour sessions")
+        return username  # Still allow anonymous users for demo purposes
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # Try to get existing user
+            cur.execute("SELECT username FROM users WHERE username = %s", (username,))
+            user = cur.fetchone()
+            
+            if not user:
+                # Create new user with default role 'user'
+                cur.execute("""
+                    INSERT INTO users (username, email, full_name, role)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (username) DO NOTHING
+                """, (username, user_info["email"], user_info["full_name"], "user"))
+                conn.commit()
+                logger.info(f"Created new user: {username} with role 'user'")
+            else:
+                # Update last_accessed time
+                cur.execute("""
+                    UPDATE users 
+                    SET last_accessed = CURRENT_TIMESTAMP 
+                    WHERE username = %s
+                """, (username,))
+                conn.commit()
+            
+            return username
+                
+    except Exception as e:
+        logger.error(f"Failed to ensure user exists: {e}")
+        conn.rollback()
+        return username  # Return username anyway to allow operation to continue
+    finally:
+        conn.close()
+
 class TourSessionCreate(BaseModel):
     tree_id: str
-    user_id: str
     current_step: Optional[str] = None
 
 class TourSessionUpdate(BaseModel):
@@ -42,8 +87,11 @@ class TourSessionResponse(BaseModel):
     tree_name: Optional[str] = None
 
 @router.post("/", response_model=TourSessionResponse)
-async def create_tour_session(session: TourSessionCreate):
+async def create_tour_session(session: TourSessionCreate, request: Request):
     """Create a new tour session"""
+    # Ensure user exists in our database
+    username = ensure_user_exists(request)
+    
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -58,7 +106,7 @@ async def create_tour_session(session: TourSessionCreate):
                 INSERT INTO tour_sessions (tree_id, user_id, status, current_step)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id, date_started
-            """, (session.tree_id, session.user_id, 'in_progress', session.current_step))
+            """, (session.tree_id, username, 'in_progress', session.current_step))
             
             result = cur.fetchone()
             session_id, date_started = result
@@ -68,7 +116,7 @@ async def create_tour_session(session: TourSessionCreate):
             return TourSessionResponse(
                 id=str(session_id),
                 tree_id=session.tree_id,
-                user_id=session.user_id,
+                user_id=username,
                 status='in_progress',
                 date_started=date_started.isoformat() + 'Z',
                 current_step=session.current_step,
@@ -85,9 +133,12 @@ async def create_tour_session(session: TourSessionCreate):
     finally:
         conn.close()
 
-@router.get("/user/{user_id}", response_model=List[TourSessionResponse])
-async def get_user_tour_sessions(user_id: str, limit: int = 10):
-    """Get tour sessions for a specific user"""
+@router.get("/my-sessions", response_model=List[TourSessionResponse])
+async def get_my_tour_sessions(request: Request, limit: int = 10):
+    """Get tour sessions for current authenticated user"""
+    # Ensure user exists in our database and get username
+    username = ensure_user_exists(request)
+    
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -100,7 +151,7 @@ async def get_user_tour_sessions(user_id: str, limit: int = 10):
                 WHERE ts.user_id = %s
                 ORDER BY ts.date_started DESC
                 LIMIT %s
-            """, (user_id, limit))
+            """, (username, limit))
             
             sessions = []
             for row in cur.fetchall():

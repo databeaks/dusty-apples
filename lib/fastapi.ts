@@ -40,9 +40,29 @@ export const fetchData = async () => {
   return response.data;
 };
 
-// Example: GET /api/user
+// User authentication
 export const getUser = async () => {
   const response = await api.get("/user");
+  return response.data;
+};
+
+export const getCurrentUser = async () => {
+  const response = await api.get("/users/me");
+  return response.data;
+};
+
+export const getAllUsers = async () => {
+  const response = await api.get("/users");
+  return response.data;
+};
+
+export const updateUser = async (username: string, userData: any) => {
+  const response = await api.put(`/users/${username}`, userData);
+  return response.data;
+};
+
+export const deleteUser = async (username: string) => {
+  const response = await api.delete(`/users/${username}`);
   return response.data;
 };
 
@@ -624,8 +644,8 @@ export const createTourSession = async (request: TourSessionCreateRequest): Prom
   return response.data;
 };
 
-export const getTourSessionsByUser = async (userId: string, limit: number = 10): Promise<TourSession[]> => {
-  const response = await api.get(`/tour-sessions/user/${userId}?limit=${limit}`);
+export const getMyTourSessions = async (limit: number = 10): Promise<TourSession[]> => {
+  const response = await api.get(`/tour-sessions/my-sessions?limit=${limit}`);
   return response.data;
 };
 

@@ -5,6 +5,29 @@ export interface ApiData {
   user: any;
 }
 
+// User Management Types
+export interface User {
+  username: string;
+  add_date: string;
+  last_accessed: string;
+  role: 'user' | 'admin';
+  email?: string;
+  name?: string;
+}
+
+export interface UserCreateRequest {
+  username: string;
+  email?: string;
+  full_name?: string;
+  role?: 'user' | 'admin';
+}
+
+export interface UserUpdateRequest {
+  email?: string;
+  full_name?: string;
+  role?: 'user' | 'admin';
+}
+
 // Decision Tree Types
 export interface DecisionTreeNode {
   id: string;
@@ -158,7 +181,6 @@ export interface TourSession {
 // Tour Session Management Types
 export interface TourSessionCreateRequest {
   tree_id: string;
-  user_id: string;
   current_step?: string;
 }
 

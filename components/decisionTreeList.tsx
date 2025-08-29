@@ -215,7 +215,7 @@ export function DecisionTreeList({ onEditTree }: DecisionTreeListProps) {
               <Button 
                 onClick={handleCreateTree} 
                 disabled={isCreating}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 {isCreating ? 'Creating...' : 'Create New Tree'}
@@ -360,7 +360,7 @@ export function DecisionTreeList({ onEditTree }: DecisionTreeListProps) {
                     <Button
                       size="sm"
                       onClick={() => onEditTree(tree.id)}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600"
                     >
                       <Edit3 className="h-4 w-4 mr-1" />
                       Edit

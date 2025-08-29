@@ -2,53 +2,27 @@
 
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store/appStore';
-import { getUser } from '@/lib/fastapi';
 import { Home, User, Menu, Loader2, BarChart3, GitBranch } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 export function Navigation() {
-  const { currentView, setCurrentView } = useAppStore();
+  const { 
+    currentUser, 
+    isLoadingUser, 
+    userError, 
+    loadCurrentUser 
+  } = useAppStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
-  const [userData, setUserData] = useState<any>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [userError, setUserError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        setIsLoadingUser(true);
-        const user = await getUser();
-        setUserData(user);
-        setUserError(null);
-      } catch (error) {
-        setUserError(error instanceof Error ? error.message : 'Failed to load user');
-        setUserData(null);
-      } finally {
-        setIsLoadingUser(false);
-      }
-    };
-
-    fetchUserData();
-  }, []);
-
-  // Sync currentView with pathname
-  useEffect(() => {
-    if (pathname === '/') {
-      setCurrentView('home');
-    } else if (pathname === '/dashboard') {
-      setCurrentView('dashboard');
-    } else if (pathname.startsWith('/decision-tree')) {
-      setCurrentView('decision-tree-list');
+    // Load user data on component mount if not already loaded
+    if (!currentUser && !isLoadingUser && !userError) {
+      loadCurrentUser();
     }
-  }, [pathname, setCurrentView]);
-
-  // Debug currentView changes
-  useEffect(() => {
-    console.log('Navigation: currentView changed to:', currentView, 'pathname:', pathname);
-  }, [currentView, pathname]);
+  }, [currentUser, isLoadingUser, userError, loadCurrentUser]);
 
   const navItems = [
     { id: 'home', label: 'Home', icon: Home, path: '/', isView: true },
@@ -82,14 +56,7 @@ export function Navigation() {
                 } else if (item.id === 'decision-tree-list') {
                   isActive = pathname.startsWith('/decision-tree');
                 }
-                
-                // Debug logging for each nav item
-                console.log(`Nav item ${item.id}:`, {
-                  itemId: item.id,
-                  pathname,
-                  itemPath: item.path,
-                  isActive
-                });
+
                 
                 return (
                   <Link
@@ -124,7 +91,7 @@ export function Navigation() {
                   'Loading...'
                 ) : userError ? (
                   'Guest User'
-                ) : userData?.name || userData?.username || userData?.email || 'Unknown User'}
+                ) : currentUser?.name || currentUser?.username || currentUser?.email || 'Unknown User'}
               </span>
             </div>
 

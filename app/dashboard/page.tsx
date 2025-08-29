@@ -4,10 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store/appStore';
-import { dashboardMetrics, sampleTourSessions } from '@/lib/data/sampleData';
+import { dashboardMetrics } from '@/lib/data/sampleData';
 import { TourSession } from '@/types/api';
 import { useState, useEffect } from 'react';
-import { getTourSessionsByUser } from '@/lib/fastapi';
+import { getMyTourSessions } from '@/lib/fastapi';
 import { 
   MessageSquare, 
   FolderOpen, 
@@ -35,7 +35,7 @@ const iconMap = {
 
 export default function DashboardPage() {
   const { openGuidedTour } = useAppStore();
-  const [tourSessions, setTourSessions] = useState<TourSession[]>(sampleTourSessions);
+  const [tourSessions, setTourSessions] = useState<TourSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
 
   // Load tour sessions on component mount
@@ -43,12 +43,13 @@ export default function DashboardPage() {
     const loadTourSessions = async () => {
       setIsLoadingSessions(true);
       try {
-        // In production, this would use the actual user ID
-        const sessions = await getTourSessionsByUser('demo-user', 10);
+        // Get tour sessions for the current authenticated user
+        const sessions = await getMyTourSessions(10);
         setTourSessions(sessions);
       } catch (error) {
-        console.warn('Failed to load tour sessions, using sample data:', error);
-        // Keep using sample data if API fails
+        console.error('Failed to load tour sessions:', error);
+        // Keep empty array if API fails
+        setTourSessions([]);
       } finally {
         setIsLoadingSessions(false);
       }
@@ -124,7 +125,7 @@ export default function DashboardPage() {
 
   const refreshTourSessions = async () => {
     try {
-      const sessions = await getTourSessionsByUser('demo-user', 10);
+      const sessions = await getMyTourSessions(10);
       setTourSessions(sessions);
     } catch (error) {
       console.warn('Failed to refresh tour sessions:', error);
@@ -153,7 +154,7 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
               <p className="mt-1 text-sm text-gray-600">
-                Welcome back! Take a look at your recent activity and quick actions.
+                Welcome back! Take a look at your tour sessions and quick actions.
               </p>
             </div>
             <div className="mt-4 sm:mt-0">
@@ -213,105 +214,126 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Tour Name</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Date Started</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Date Completed</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Status</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Progress</th>
-                      <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Results</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tourSessions.map((session) => (
-                      <tr key={session.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-4 px-2">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 mr-3">
-                              <div className="h-8 w-8 bg-red-50 rounded-full flex items-center justify-center">
-                                <Play className="h-4 w-4 text-red-600" />
+              {isLoadingSessions ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="flex items-center space-x-2 text-gray-500">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
+                    <span>Loading tour sessions...</span>
+                  </div>
+                </div>
+              ) : tourSessions.length > 0 ? (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Tour Name</th>
+                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Date Started</th>
+                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Date Completed</th>
+                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Status</th>
+                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Progress</th>
+                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-600">Results</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tourSessions.map((session) => (
+                          <tr key={session.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-4 px-2">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 mr-3">
+                                  <div className="h-8 w-8 bg-red-50 rounded-full flex items-center justify-center">
+                                    <Play className="h-4 w-4 text-red-600" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">{session.tree_name}</p>
+                                  <p className="text-xs text-gray-500">ID: {session.id}</p>
+                                </div>
                               </div>
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">{session.tree_name}</p>
-                              <p className="text-xs text-gray-500">ID: {session.id}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-2">
-                          <div className="flex items-center text-sm text-gray-600">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            {formatDate(session.date_started)}
-                          </div>
-                        </td>
-                        <td className="py-4 px-2">
-                          {session.date_completed ? (
-                            <div className="flex items-center text-sm text-gray-600">
-                              <Calendar className="h-4 w-4 mr-1" />
-                              {formatDate(session.date_completed)}
-                            </div>
-                          ) : (
-                            <span className="text-sm text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-2">
-                          <div className="flex items-center">
-                            {getStatusIcon(session.status)}
-                            <Badge 
-                              variant={getStatusBadgeVariant(session.status)} 
-                              className="ml-2 text-xs"
-                            >
-                              {session.status.replace('_', ' ')}
-                            </Badge>
-                          </div>
-                        </td>
-                        <td className="py-4 px-2">
-                          <div className="flex items-center">
-                            <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                              <div 
-                                className="bg-red-600 h-2 rounded-full" 
-                                style={{ width: `${session.progress_percentage}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm text-gray-600">{session.progress_percentage}%</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-2">
-                          {session.status === 'completed' ? (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleViewResults(session)}
-                              className="text-xs"
-                            >
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                              View Results
-                            </Button>
-                          ) : (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleResumeTour(session)}
-                              className="text-xs text-blue-600 hover:text-blue-700"
-                            >
-                              <RotateCcw className="h-3 w-3 mr-1" />
-                              Resume
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <Button variant="ghost" className="w-full">
-                  View all tour sessions
-                </Button>
-              </div>
+                            </td>
+                            <td className="py-4 px-2">
+                              <div className="flex items-center text-sm text-gray-600">
+                                <Calendar className="h-4 w-4 mr-1" />
+                                {formatDate(session.date_started)}
+                              </div>
+                            </td>
+                            <td className="py-4 px-2">
+                              {session.date_completed ? (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <Calendar className="h-4 w-4 mr-1" />
+                                  {formatDate(session.date_completed)}
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-2">
+                              <div className="flex items-center">
+                                {getStatusIcon(session.status)}
+                                <Badge 
+                                  variant={getStatusBadgeVariant(session.status)} 
+                                  className="ml-2 text-xs"
+                                >
+                                  {session.status.replace('_', ' ')}
+                                </Badge>
+                              </div>
+                            </td>
+                            <td className="py-4 px-2">
+                              <div className="flex items-center">
+                                <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                  <div 
+                                    className="bg-red-600 h-2 rounded-full" 
+                                    style={{ width: `${session.progress_percentage}%` }}
+                                  ></div>
+                                </div>
+                                <span className="text-sm text-gray-600">{session.progress_percentage}%</span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-2">
+                              {session.status === 'completed' ? (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleViewResults(session)}
+                                  className="text-xs"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  View Results
+                                </Button>
+                              ) : (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleResumeTour(session)}
+                                  className="text-xs text-blue-600 hover:text-blue-700"
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1" />
+                                  Resume
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <Button variant="ghost" className="w-full" onClick={refreshTourSessions}>
+                      View all tour sessions
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <Play className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">No tour sessions yet</h3>
+                  <p className="text-xs text-gray-500 mb-4 max-w-sm">
+                    Start your first tour session to begin exploring the application and track your progress.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

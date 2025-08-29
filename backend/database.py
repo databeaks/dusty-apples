@@ -345,6 +345,44 @@ def init_database():
                 WHERE is_default_for_tour = TRUE
             """)
             
+            # Create users table for authentication and authorization
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    username VARCHAR(255) PRIMARY KEY,
+                    add_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    role VARCHAR(50) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+                    email VARCHAR(255),
+                    full_name VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Create indexes for efficient user queries
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users (role)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_users_last_accessed ON users (last_accessed DESC)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)")
+            
+            # Create trigger to auto-update users updated_at timestamp
+            cur.execute("""
+                CREATE OR REPLACE FUNCTION update_users_updated_at()
+                RETURNS TRIGGER AS $$
+                BEGIN
+                    NEW.updated_at = CURRENT_TIMESTAMP;
+                    RETURN NEW;
+                END;
+                $$ language 'plpgsql';
+            """)
+            
+            cur.execute("""
+                DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+                CREATE TRIGGER update_users_updated_at
+                    BEFORE UPDATE ON users
+                    FOR EACH ROW
+                    EXECUTE FUNCTION update_users_updated_at();
+            """)
+            
             # Create tour sessions table for tracking user progress
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS tour_sessions (
