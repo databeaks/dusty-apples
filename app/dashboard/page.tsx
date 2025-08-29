@@ -153,20 +153,20 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
               <p className="mt-1 text-sm text-gray-600">
-                Welcome back! Here's what's happening with your product.
+                Welcome back! Take a look at your recent activity and quick actions.
               </p>
             </div>
             <div className="mt-4 sm:mt-0">
               <Button onClick={openGuidedTour} className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600">
                 <Play className="h-4 w-4 mr-2" />
-                Start Setup Tour
+                Start Tour
               </Button>
             </div>
           </div>
         </div>
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {dashboardMetrics.map((metric) => {
             const Icon = iconMap[metric.icon as keyof typeof iconMap];
             return (
@@ -196,7 +196,7 @@ export default function DashboardPage() {
               </Card>
             );
           })}
-        </div>
+        </div> */}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Recent Tour Activity */}
@@ -338,22 +338,6 @@ export default function DashboardPage() {
                 <TrendingUp className="h-4 w-4 mr-2" />
                 View Analytics
               </Button>
-              
-              <div className="pt-4 border-t border-gray-100">
-                <Button 
-                  onClick={async () => {
-                    try {
-                      await openGuidedTour();
-                    } catch (error) {
-                      console.error('Failed to start setup tour:', error);
-                    }
-                  }}
-                  className="w-full bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600"
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Start Setup Tour
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </div>
