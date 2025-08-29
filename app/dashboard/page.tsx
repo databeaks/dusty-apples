@@ -239,38 +239,66 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Metrics Grid */}
-        {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {dashboardMetrics.map((metric) => {
-            const Icon = iconMap[metric.icon as keyof typeof iconMap];
-            return (
-              <Card key={metric.id} className="bg-white">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      {Icon && <Icon className="h-5 w-5 text-red-600 mr-3" />}
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">{metric.title}</p>
-                        <p className="text-2xl font-bold text-gray-900">{metric.value}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      {getTrendIcon(metric.trend)}
-                    </div>
+        {/* Tour Metrics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* Total Tours */}
+          <Card className="bg-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Play className="h-5 w-5 text-red-600 mr-3" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Tours</p>
+                    <p className="text-2xl font-bold text-gray-900">{tourSessions.length}</p>
                   </div>
-                  {metric.change && (
-                    <div className="mt-2">
-                      <span className={`text-sm font-medium ${getTrendColor(metric.trend)}`}>
-                        {metric.change}
-                      </span>
-                      <span className="text-sm text-gray-500 ml-1">vs last month</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div> */}
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">All tour sessions</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tours In Progress */}
+          <Card className="bg-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Clock className="h-5 w-5 text-blue-600 mr-3" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">In Progress</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {tourSessions.filter(session => session.status === 'in_progress').length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">Currently active tours</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tours Completed */}
+          <Card className="bg-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-3" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Completed</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {tourSessions.filter(session => session.status === 'completed').length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">Successfully finished tours</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="space-y-6">
           {/* Recent Tour Activity */}
