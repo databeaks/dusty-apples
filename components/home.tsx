@@ -34,7 +34,7 @@ export function Home() {
             </div>
             
             <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 mb-6">
-              Find out which
+              Discover which
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">
                 Databricks Deployment
               </span>
@@ -42,7 +42,7 @@ export function Home() {
             </h1>
             
             <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              Dusty Apple will recommend the best Databricks deployment optionfor your customers based on their requirements
+              Dusty Apple will recommend Databricks deployment options for your customers based on their requirements
             </p>
             
             {/* Main CTA */}
