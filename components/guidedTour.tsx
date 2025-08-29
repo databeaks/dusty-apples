@@ -155,6 +155,11 @@ export function GuidedTour() {
     currentStepIndex,
     formAnswers,
     closeGuidedTour,
+    showExitConfirmation,
+    hideExitConfirmation,
+    exitAndSave,
+    exitWithoutSaving,
+    showExitModal,
     nextStep,
     previousStep,
     updateFormAnswer,
@@ -174,6 +179,8 @@ export function GuidedTour() {
     getCurrentStep,
     initializeTourFromRoot,
     currentStepPath,
+    currentSessionId,
+    rootStepId,
   } = useAppStore();
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -396,7 +403,12 @@ export function GuidedTour() {
   };
 
   const handleClose = () => {
-    if (confirm('Are you sure you want to close the setup tour? Your progress will be lost.')) {
+    // Show exit confirmation for non-test tours that have progressed past root
+    const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+    if (!isTestMode && currentSessionId && hasProgressedPastRoot) {
+      showExitConfirmation();
+    } else {
+      // For test tours or tours at root step, exit immediately without confirmation
       closeGuidedTour();
       resetGuidedTour();
     }
@@ -762,6 +774,49 @@ export function GuidedTour() {
           </div>
         </div>
       </div>
+      
+      {/* Exit Confirmation Modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Exit Tour</h3>
+              <p className="text-gray-600">
+                You're partway through the setup tour. What would you like to do?
+              </p>
+            </div>
+            
+            <div className="flex flex-col space-y-3">
+              <Button
+                onClick={async () => {
+                  await exitAndSave();
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Check className="h-4 w-4 mr-2" />
+                Save Progress & Exit
+              </Button>
+              
+              <Button
+                onClick={async () => {
+                  await exitWithoutSaving();
+                }}
+                variant="destructive"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Exit Without Saving
+              </Button>
+              
+              <Button
+                onClick={hideExitConfirmation}
+                variant="outline"
+              >
+                Continue Tour
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

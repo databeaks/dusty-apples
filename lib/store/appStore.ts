@@ -27,6 +27,7 @@ interface AppStore {
   useDatabaseTour: boolean;
   isTestMode: boolean; // Flag to indicate if this is a test tour (no database sessions)
   showRootStepModal: boolean; // Flag to show the root step modal
+  showExitModal: boolean; // Flag to show the exit confirmation modal
   tourReturnPath: string | null; // Path to return to when tour is completed/closed
   databaseTourSteps: TourStep[];
   databaseConditionalNodes: ConditionalNodeData[];
@@ -45,6 +46,10 @@ interface AppStore {
   openGuidedTour: () => Promise<void>;
   openTestTour: () => Promise<void>; // Open tour in test mode (no database sessions)
   closeGuidedTour: () => void;
+  showExitConfirmation: () => void;
+  hideExitConfirmation: () => void;
+  exitAndSave: () => Promise<void>;
+  exitWithoutSaving: () => Promise<void>;
   nextStep: () => void;
   previousStep: () => void;
   
@@ -94,6 +99,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   useDatabaseTour: false,
   isTestMode: false,
   showRootStepModal: false,
+  showExitModal: false,
   tourReturnPath: null,
   databaseTourSteps: [],
   databaseConditionalNodes: [],
@@ -125,9 +131,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }));
     
     // Auto-save session state after form answer update (debounced)
-    // Skip auto-save if in test mode
-    const { currentSessionId, isTestMode } = get();
-    if (currentSessionId && !isTestMode) {
+    // Auto-save only if we have a session, not in test mode, and have progressed past root
+    const { currentSessionId, isTestMode, currentStepPath, rootStepId } = get();
+    const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+    if (currentSessionId && !isTestMode && hasProgressedPastRoot) {
       // Debounce the auto-save to avoid too many API calls
       setTimeout(() => {
         get().saveSessionState();
@@ -141,6 +148,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       formAnswers: {},
       isGuidedTourOpen: false,
       showRootStepModal: false, // Close modal when resetting
+      showExitModal: false, // Close exit modal when resetting
     }),
   
   openGuidedTour: async () => {
@@ -275,6 +283,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       isTestMode: false, // Reset test mode when closing
       currentSessionId: null, // Clear any session ID
       showRootStepModal: false, // Close modal when closing tour
+      showExitModal: false, // Close exit modal
       tourReturnPath: null, // Clear return path
     });
     
@@ -283,6 +292,52 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (tourReturnPath && typeof window !== 'undefined') {
       window.location.href = tourReturnPath;
     }
+  },
+  
+  showExitConfirmation: () => {
+    set({ showExitModal: true });
+  },
+  
+  hideExitConfirmation: () => {
+    set({ showExitModal: false });
+  },
+  
+  exitAndSave: async () => {
+    const { currentSessionId, isTestMode, currentStepPath, rootStepId } = get();
+    
+    // Save session state if we have a session, not in test mode, and have progressed past root
+    const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+    if (currentSessionId && !isTestMode && hasProgressedPastRoot) {
+      try {
+        await get().saveSessionState();
+        console.log('✅ Session saved before exit');
+      } catch (error) {
+        console.warn('⚠️ Failed to save session on exit:', error);
+        // Continue with exit even if save fails
+      }
+    }
+    
+    get().closeGuidedTour();
+  },
+  
+  exitWithoutSaving: async () => {
+    const { currentSessionId, isTestMode } = get();
+    
+    // Mark session as abandoned if we have a session and not in test mode
+    if (currentSessionId && !isTestMode) {
+      try {
+        const { updateTourSession } = await import('@/lib/fastapi');
+        await updateTourSession(currentSessionId, {
+          status: 'abandoned'
+        });
+        console.log('✅ Session marked as abandoned');
+      } catch (error) {
+        console.warn('⚠️ Failed to mark session as abandoned:', error);
+        // Continue with exit even if marking abandoned fails
+      }
+    }
+    
+    get().closeGuidedTour();
   },
   
   nextStep: () =>
@@ -536,9 +591,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
             currentStepIndex: state.currentStepIndex + 1
           }));
           
-          // Auto-save session state only if we have a session and not in test mode
-          const { currentSessionId, isTestMode } = get();
-          if (currentSessionId && !isTestMode) {
+          // Auto-save session state only if we have a session, not in test mode, and have progressed past root
+          const { currentSessionId, isTestMode, currentStepPath, rootStepId } = get();
+          const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+          if (currentSessionId && !isTestMode && hasProgressedPastRoot) {
             get().saveSessionState();
           }
           
@@ -570,9 +626,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         currentStepIndex: state.currentStepIndex + 1
       }));
       
-      // Auto-save session state only if we have a session and not in test mode
-      const { currentSessionId, isTestMode } = get();
-      if (currentSessionId && !isTestMode) {
+      // Auto-save session state only if we have a session, not in test mode, and have progressed past root
+      const { currentSessionId, isTestMode, currentStepPath, rootStepId } = get();
+      const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+      if (currentSessionId && !isTestMode && hasProgressedPastRoot) {
         get().saveSessionState();
       }
       
@@ -595,9 +652,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       currentStepIndex: Math.max(0, state.currentStepIndex - 1)
     }));
     
-    // Auto-save session state only if we have a session and not in test mode
-    const { currentSessionId, isTestMode } = get();
-    if (currentSessionId && !isTestMode) {
+    // Auto-save session state only if we have a session, not in test mode, and have progressed past root
+    const state = get();
+    const hasProgressedPastRoot = state.currentStepPath.length > 1 || (state.currentStepPath.length === 1 && state.currentStepPath[0] !== state.rootStepId);
+    if (state.currentSessionId && !state.isTestMode && hasProgressedPastRoot) {
       get().saveSessionState();
     }
     
