@@ -52,7 +52,7 @@ export const getCurrentUser = async () => {
 };
 
 export const getAllUsers = async () => {
-  const response = await api.get("/users");
+  const response = await api.get("/users/");
   return response.data;
 };
 

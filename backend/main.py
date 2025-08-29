@@ -54,11 +54,13 @@ async def startup_event():
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build")
 os.makedirs(static_dir, exist_ok=True)
 
-app.mount("/", StaticFiles(directory=static_dir, html=True), name="build")
-
-# --- Catch-all for React Routes ---
+# --- Catch-all for React Routes (exclude API paths) ---
 @app.get("/{full_path:path}")
 async def serve_react(full_path: str):
+    # Don't serve React for API paths
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
     index_html = os.path.join(static_dir, "index.html")
     if os.path.exists(index_html):
         logger.info(f"Serving React frontend for path: /{full_path}")
@@ -68,3 +70,6 @@ async def serve_react(full_path: str):
         status_code=404,
         detail="Frontend not built. Please run 'npm run build' first."
     )
+
+# Mount static files for built assets (CSS, JS, etc.)
+app.mount("/static", StaticFiles(directory=static_dir, html=False), name="static")

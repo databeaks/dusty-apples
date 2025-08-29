@@ -188,8 +188,10 @@ async def get_current_user(request: Request):
         conn.close()
 
 @router.get("/", response_model=List[UserResponse])
-async def get_all_users(current_user: UserResponse = Depends(get_or_create_user)):
+async def get_all_users(request: Request):
     """Get all users (admin only)"""
+    # Get current user for authorization
+    current_user = await get_or_create_user(request)
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -225,9 +227,12 @@ async def get_all_users(current_user: UserResponse = Depends(get_or_create_user)
 async def update_user(
     username: str, 
     update_request: UserUpdateRequest,
-    current_user: UserResponse = Depends(get_or_create_user)
+    request: Request
 ):
     """Update user information (admin only or own profile)"""
+    # Get current user for authorization
+    current_user = await get_or_create_user(request)
+    
     # Users can update their own profile, admins can update any profile
     if current_user.role != "admin" and current_user.username != username:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -293,9 +298,12 @@ async def update_user(
 @router.delete("/{username}")
 async def delete_user(
     username: str,
-    current_user: UserResponse = Depends(get_or_create_user)
+    request: Request
 ):
     """Delete user (admin only, cannot delete self)"""
+    # Get current user for authorization
+    current_user = await get_or_create_user(request)
+    
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     

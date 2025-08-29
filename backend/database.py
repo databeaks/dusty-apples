@@ -427,6 +427,51 @@ def init_database():
                     EXECUTE FUNCTION update_tour_sessions_updated_at();
             """)
             
+            # Create default admin users
+            admin_users = [
+                {
+                    "username": "tony.bo",
+                    "email": "tony.bo@databricks.com", 
+                    "full_name": "Tony Bo",
+                    "role": "admin"
+                },
+                {
+                    "username": "david.wells",
+                    "email": "david.wells@databricks.com",
+                    "full_name": "David Wells", 
+                    "role": "admin"
+                }
+            ]
+            
+            for user_data in admin_users:
+                try:
+                    # Check if user already exists
+                    cur.execute("SELECT username FROM users WHERE username = %s", (user_data["username"],))
+                    existing_user = cur.fetchone()
+                    
+                    if not existing_user:
+                        # Create new admin user
+                        cur.execute("""
+                            INSERT INTO users (username, email, full_name, role)
+                            VALUES (%s, %s, %s, %s)
+                        """, (user_data["username"], user_data["email"], user_data["full_name"], user_data["role"]))
+                        logger.info(f"Created admin user: {user_data['username']} ({user_data['email']})")
+                    else:
+                        # User exists, ensure they have admin role
+                        cur.execute("""
+                            UPDATE users 
+                            SET role = 'admin', email = %s, full_name = %s, last_accessed = CURRENT_TIMESTAMP
+                            WHERE username = %s AND role != 'admin'
+                        """, (user_data["email"], user_data["full_name"], user_data["username"]))
+                        if cur.rowcount > 0:
+                            logger.info(f"Promoted existing user to admin: {user_data['username']} ({user_data['email']})")
+                        else:
+                            logger.info(f"Admin user already exists: {user_data['username']} ({user_data['email']})")
+                            
+                except Exception as user_error:
+                    logger.warning(f"Failed to create/update admin user {user_data['username']}: {user_error}")
+                    # Continue with other users and database initialization
+            
             conn.commit()
             logger.info("Database tables initialized successfully")
     except Exception as e:
