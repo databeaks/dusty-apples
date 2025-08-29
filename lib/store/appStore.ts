@@ -82,7 +82,7 @@ interface AppStore {
   
   // Root-based navigation actions
   initializeTourFromRoot: () => Promise<void>;
-  navigateToNextStep: () => string | null;
+  navigateToNextStep: () => Promise<string | null>;
   navigateToPreviousStep: () => string | null;
   resetToRoot: () => void;
   validateCurrentTourState: () => RootValidationResult;
@@ -90,6 +90,9 @@ interface AppStore {
   getStepById: (stepId: string) => TourStep | null;
   getMainTourSteps: () => TourStep[];
   getConditionalSteps: () => TourStep[];
+  
+  // Helper function to create session when user first progresses past root
+  createSessionIfNeeded: () => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -131,6 +134,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const { getCurrentUser } = await import('@/lib/fastapi');
       const user = await getCurrentUser();
+      console.log('📡 API Response from getCurrentUser:', user);
+      console.log('📡 API Response company_role:', user?.company_role);
+      console.log('📡 API Response stringified:', JSON.stringify(user, null, 2));
       set({ currentUser: user, isLoadingUser: false, userError: null });
     } catch (error) {
       console.error('Failed to load current user:', error);
@@ -199,23 +205,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const { loadDatabaseTourSteps } = get();
       await loadDatabaseTourSteps();
       
-      // Get default tree and create a session
+      // Store the default tree info for later session creation
       try {
-        const { getDefaultTourTree, createTourSession } = await import('@/lib/fastapi');
+        const { getDefaultTourTree } = await import('@/lib/fastapi');
         const defaultTreeResponse = await getDefaultTourTree();
         
         if (defaultTreeResponse.default_tree) {
-          // Create a new tour session
-          const session = await createTourSession({
-            tree_id: defaultTreeResponse.default_tree.id,
-            current_step: get().rootStepId || undefined
-          });
-          
-          set({ currentSessionId: session.id });
-          console.log('✅ Tour session created:', session.id);
+          // Store tree ID for session creation when user progresses past root
+          set({ currentDecisionTreeId: defaultTreeResponse.default_tree.id });
+          console.log('✅ Default tree loaded for tour:', defaultTreeResponse.default_tree.id);
         }
       } catch (error) {
-        console.warn('Failed to create tour session:', error);
+        console.warn('Failed to load default tour tree:', error);
         // Continue without session tracking
       }
       
@@ -309,6 +310,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       isGuidedTourOpen: false,
       isTestMode: false, // Reset test mode when closing
       currentSessionId: null, // Clear any session ID
+      currentDecisionTreeId: null, // Clear decision tree ID to avoid stale data
       showRootStepModal: false, // Close modal when closing tour
       showExitModal: false, // Close exit modal
       tourReturnPath: null, // Clear return path
@@ -350,7 +352,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   exitWithoutSaving: async () => {
     const { currentSessionId, isTestMode } = get();
     
-    // Mark session as abandoned if we have a session and not in test mode
+    // Only mark session as abandoned if we have a session and not in test mode
+    // If no session exists, the user never progressed past root, so nothing to abandon
     if (currentSessionId && !isTestMode) {
       try {
         const { updateTourSession } = await import('@/lib/fastapi');
@@ -362,6 +365,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         console.warn('⚠️ Failed to mark session as abandoned:', error);
         // Continue with exit even if marking abandoned fails
       }
+    } else if (!currentSessionId) {
+      console.log('ℹ️ No session to abandon - user never progressed past root step');
     }
     
     get().closeGuidedTour();
@@ -542,7 +547,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
   
-  navigateToNextStep: () => {
+  navigateToNextStep: async () => {
     const { tourFlow, formAnswers, currentStepPath, databaseTourSteps } = get();
     if (!tourFlow) return null;
     
@@ -613,16 +618,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
             continue;
           }
           
+          // Create session if this is the first progression past root
+          const { currentStepPath: currentPath, rootStepId } = get();
+          const isProgressingPastRoot = currentPath.length === 1 && currentPath[0] === rootStepId;
+          if (isProgressingPastRoot) {
+            await get().createSessionIfNeeded();
+          }
+          
           set(state => ({
             currentStepPath: [...state.currentStepPath, nextStepId],
             currentStepIndex: state.currentStepIndex + 1
           }));
           
           // Auto-save session state only if we have a session, not in test mode, and have progressed past root
-          const { currentSessionId, isTestMode, currentStepPath, rootStepId } = get();
-          const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+          const { currentSessionId, isTestMode, currentStepPath: updatedPath, rootStepId: updatedRootStepId } = get();
+          const hasProgressedPastRoot = updatedPath.length > 1 || (updatedPath.length === 1 && updatedPath[0] !== updatedRootStepId);
           if (currentSessionId && !isTestMode && hasProgressedPastRoot) {
-            get().saveSessionState();
+            // Fire and forget - don't block navigation
+            get().saveSessionState().catch(console.warn);
           }
           
           return nextStepId;
@@ -648,16 +661,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
       
       console.log(`➡️ Direct navigation to: ${nextStepId}`);
+      
+      // Create session if this is the first progression past root
+      const { currentStepPath: currentPath, rootStepId } = get();
+      const isProgressingPastRoot = currentPath.length === 1 && currentPath[0] === rootStepId;
+      if (isProgressingPastRoot) {
+        await get().createSessionIfNeeded();
+      }
+      
       set(state => ({
         currentStepPath: [...state.currentStepPath, nextStepId],
         currentStepIndex: state.currentStepIndex + 1
       }));
       
       // Auto-save session state only if we have a session, not in test mode, and have progressed past root
-      const { currentSessionId, isTestMode, currentStepPath, rootStepId } = get();
-      const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+      const { currentSessionId, isTestMode, currentStepPath: updatedPath, rootStepId: updatedRootStepId } = get();
+      const hasProgressedPastRoot = updatedPath.length > 1 || (updatedPath.length === 1 && updatedPath[0] !== updatedRootStepId);
       if (currentSessionId && !isTestMode && hasProgressedPastRoot) {
-        get().saveSessionState();
+        // Fire and forget - don't block navigation
+        get().saveSessionState().catch(console.warn);
       }
       
       return nextStepId;
@@ -683,7 +705,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const state = get();
     const hasProgressedPastRoot = state.currentStepPath.length > 1 || (state.currentStepPath.length === 1 && state.currentStepPath[0] !== state.rootStepId);
     if (state.currentSessionId && !state.isTestMode && hasProgressedPastRoot) {
-      get().saveSessionState();
+      // Fire and forget - don't block navigation
+      get().saveSessionState().catch(console.warn);
     }
     
     return previousStepId;
@@ -886,6 +909,32 @@ export const useAppStore = create<AppStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to resume tour:', error);
       throw error;
+    }
+  },
+  
+  // Helper function to create session when user first progresses past root
+  createSessionIfNeeded: async () => {
+    const { currentSessionId, isTestMode, currentDecisionTreeId, getCurrentStep } = get();
+    
+    // Don't create session if we already have one, in test mode, or no tree ID
+    if (currentSessionId || isTestMode || !currentDecisionTreeId) {
+      return;
+    }
+    
+    try {
+      const { createTourSession } = await import('@/lib/fastapi');
+      const currentStep = getCurrentStep();
+      
+      const session = await createTourSession({
+        tree_id: currentDecisionTreeId,
+        current_step: currentStep?.id || undefined
+      });
+      
+      set({ currentSessionId: session.id });
+      console.log('✅ Tour session created on first progression past root:', session.id);
+    } catch (error) {
+      console.warn('Failed to create tour session when progressing past root:', error);
+      // Continue without session tracking
     }
   },
 }));

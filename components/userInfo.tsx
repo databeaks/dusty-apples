@@ -83,7 +83,7 @@ export function UserInfo() {
                 <User className="h-4 w-4 text-blue-600" />
               )}
             </div>
-            <span>{currentUser.name || currentUser.username}</span>
+            <span>{currentUser.full_name || currentUser.username}</span>
           </CardTitle>
           <Badge variant={isAdmin() ? "default" : "secondary"}>
             {currentUser.role}

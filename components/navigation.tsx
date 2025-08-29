@@ -2,10 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store/appStore';
-import { Home, User, Menu, Loader2, BarChart3, GitBranch, Settings } from 'lucide-react';
+import { Home, User, Menu, Loader2, BarChart3, GitBranch, Settings, MessageCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import FeedbackForm from './feedbackForm';
 
 export function Navigation() {
   const { 
@@ -16,6 +17,7 @@ export function Navigation() {
     isAdmin 
   } = useAppStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -25,21 +27,28 @@ export function Navigation() {
     }
   }, [currentUser, isLoadingUser, userError, loadCurrentUser]);
 
-  const baseNavItems = [
+  // Only show Home for everyone
+  const homeNavItems = [
     { id: 'home', label: 'Home', icon: Home, path: '/', isView: true },
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard', isView: true },
   ];
 
-  // Add decision tree and settings for admin users only
+  // Dashboard is only available to database users (not anonymous)
+  const isDatabaseUser = currentUser && currentUser.username !== 'anonymous';
+  const userNavItems = isDatabaseUser 
+    ? [...homeNavItems, { id: 'dashboard', label: 'Dashboard', icon: BarChart3, path: '/dashboard', isView: true }]
+    : homeNavItems;
+
+  // Add decision tree, feedback, and settings for admin users only
   const navItems = currentUser && isAdmin() 
-    ? [...baseNavItems, 
+    ? [...userNavItems, 
        { id: 'decision-tree-list', label: 'Decision Tree', icon: GitBranch, path: '/decision-tree', isView: true },
+       { id: 'feedback', label: 'Feedback', icon: MessageCircle, path: '/feedback', isView: true },
        { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', isView: true }]
-    : baseNavItems;
+    : userNavItems;
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           {/* Logo and main nav */}
           <div className="flex items-center">
@@ -62,6 +71,8 @@ export function Navigation() {
                   isActive = pathname === '/dashboard' || pathname === '/dashboard/';
                 } else if (item.id === 'decision-tree-list') {
                   isActive = pathname.startsWith('/decision-tree');
+                } else if (item.id === 'feedback') {
+                  isActive = pathname.startsWith('/feedback');
                 } else if (item.id === 'settings') {
                   isActive = pathname.startsWith('/settings');
                 }
@@ -87,6 +98,17 @@ export function Navigation() {
 
           {/* Right side */}
           <div className="flex items-center space-x-4">
+            {/* Send Feedback Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFeedbackModal(true)}
+              className="hidden sm:flex items-center space-x-2 text-sm"
+            >
+              <MessageCircle className="h-4 w-4" />
+              <span>Send Feedback</span>
+            </Button>
+            
             <div className="flex items-center space-x-2">
               <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center">
                 {isLoadingUser ? (
@@ -101,7 +123,7 @@ export function Navigation() {
                     'Loading...'
                   ) : userError ? (
                     'Guest User'
-                  ) : currentUser?.name || currentUser?.username || currentUser?.email || 'Unknown User'}
+                  ) : currentUser?.email || currentUser?.username || 'Unknown User'}
                 </span>
                 {currentUser && isAdmin() && (
                   <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gradient-to-r from-red-500 to-orange-500 text-white">
@@ -126,6 +148,18 @@ export function Navigation() {
         {isMobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-gray-200">
             <div className="space-y-1">
+              {/* Mobile Feedback Button */}
+              <button
+                onClick={() => {
+                  setShowFeedbackModal(true);
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full text-left flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors text-gray-700 hover:text-red-600 hover:bg-gray-50"
+              >
+                <MessageCircle className="h-5 w-5 mr-3" />
+                Send Feedback
+              </button>
+              
               {navItems.map((item) => {
                 const Icon = item.icon;
                 // Use appropriate logic for each navigation item
@@ -136,6 +170,8 @@ export function Navigation() {
                   isActive = pathname === '/dashboard' || pathname === '/dashboard/';
                 } else if (item.id === 'decision-tree-list') {
                   isActive = pathname.startsWith('/decision-tree');
+                } else if (item.id === 'feedback') {
+                  isActive = pathname.startsWith('/feedback');
                 } else if (item.id === 'settings') {
                   isActive = pathname.startsWith('/settings');
                 }
@@ -160,6 +196,34 @@ export function Navigation() {
           </div>
         )}
       </div>
+      
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Send Feedback</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowFeedbackModal(false)}
+                className="h-8 w-8 p-0"
+              >
+                ✕
+              </Button>
+            </div>
+            <div className="p-6">
+              <FeedbackForm
+                onSubmitSuccess={() => {
+                  setShowFeedbackModal(false);
+                }}
+                onCancel={() => setShowFeedbackModal(false)}
+                className="border-0 shadow-none p-0"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

@@ -662,3 +662,55 @@ export const updateTourSession = async (sessionId: string, request: TourSessionU
 export const deleteTourSession = async (sessionId: string): Promise<void> => {
   await api.delete(`/tour-sessions/${sessionId}`);
 };
+
+// Feedback API functions
+import type { 
+  Feedback, 
+  FeedbackCreateRequest, 
+  FeedbackUpdateRequest, 
+  FeedbackListResponse, 
+  FeedbackStatsResponse 
+} from '@/types/api';
+
+export const submitFeedback = async (request: FeedbackCreateRequest): Promise<Feedback> => {
+  const response = await api.post("/feedback/", request);
+  return response.data;
+};
+
+export const getFeedbackList = async (params?: {
+  category?: string;
+  status?: string;
+  username?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<FeedbackListResponse> => {
+  const searchParams = new URLSearchParams();
+  if (params?.category) searchParams.append('category', params.category);
+  if (params?.status) searchParams.append('status', params.status);
+  if (params?.username) searchParams.append('username', params.username);
+  if (params?.limit) searchParams.append('limit', params.limit.toString());
+  if (params?.offset) searchParams.append('offset', params.offset.toString());
+  
+  const url = `/feedback/?${searchParams.toString()}`;
+  const response = await api.get(url);
+  return response.data;
+};
+
+export const getFeedbackStats = async (): Promise<FeedbackStatsResponse> => {
+  const response = await api.get("/feedback/stats");
+  return response.data;
+};
+
+export const getFeedbackById = async (feedbackId: string): Promise<Feedback> => {
+  const response = await api.get(`/feedback/${feedbackId}`);
+  return response.data;
+};
+
+export const updateFeedback = async (feedbackId: string, request: FeedbackUpdateRequest): Promise<Feedback> => {
+  const response = await api.put(`/feedback/${feedbackId}`, request);
+  return response.data;
+};
+
+export const deleteFeedback = async (feedbackId: string): Promise<void> => {
+  await api.delete(`/feedback/${feedbackId}`);
+};

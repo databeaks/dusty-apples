@@ -14,6 +14,7 @@ import {
   FolderOpen, 
   TrendingUp, 
   Users, 
+  User,
   ArrowUpRight, 
   ArrowDownRight,
   Minus,
@@ -35,11 +36,18 @@ const iconMap = {
 };
 
 export default function DashboardPage() {
-  const { openGuidedTour } = useAppStore();
+  const { openGuidedTour, isLoadingDatabaseTour, currentUser, isLoadingUser, loadCurrentUser } = useAppStore();
   const [tourSessions, setTourSessions] = useState<TourSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [selectedSession, setSelectedSession] = useState<TourSession | null>(null);
+
+  // Load user data on component mount if not already loaded
+  useEffect(() => {
+    if (!currentUser && !isLoadingUser) {
+      loadCurrentUser();
+    }
+  }, [currentUser, isLoadingUser, loadCurrentUser]);
 
   // Load tour sessions on component mount
   useEffect(() => {
@@ -160,6 +168,44 @@ export default function DashboardPage() {
     }
   };
 
+  // Check if user is authorized to access dashboard
+  const isDatabaseUser = currentUser && currentUser.username !== 'anonymous';
+  
+  // Show loading state while checking authentication
+  if (isLoadingUser) {
+    return (
+      <div className="flex-1 bg-gray-50 p-6 w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied for non-database users
+  if (!isDatabaseUser) {
+    return (
+      <div className="flex-1 bg-gray-50 p-6 w-full flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <User className="h-8 w-8 text-red-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
+          <p className="text-gray-600 mb-4">
+            You need to be a registered user to access the dashboard. Please contact your administrator for access.
+          </p>
+          <Button 
+            onClick={() => window.location.href = '/'}
+            className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600"
+          >
+            Return to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 bg-gray-50 p-6 w-full">
         {/* Header */}
@@ -172,9 +218,22 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="mt-4 sm:mt-0">
-              <Button onClick={openGuidedTour} className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600">
-                <Play className="h-4 w-4 mr-2" />
-                Start Tour
+              <Button 
+                onClick={openGuidedTour} 
+                disabled={isLoadingDatabaseTour}
+                className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingDatabaseTour ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Loading Tour...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Tour
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -213,9 +272,9 @@ export default function DashboardPage() {
           })}
         </div> */}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="space-y-6">
           {/* Recent Tour Activity */}
-          <Card className="lg:col-span-2 bg-white">
+          <Card className="bg-white">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -348,32 +407,6 @@ export default function DashboardPage() {
                   </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Quick Actions */}
-          <Card className="bg-white">
-            <CardHeader>
-              <CardTitle className="text-lg">Quick Actions</CardTitle>
-              <CardDescription>Common tasks and shortcuts</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start">
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Capture Feedback
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <FolderOpen className="h-4 w-4 mr-2" />
-                New Project
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <Users className="h-4 w-4 mr-2" />
-                Invite Team Member
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <TrendingUp className="h-4 w-4 mr-2" />
-                View Analytics
-              </Button>
             </CardContent>
           </Card>
         </div>

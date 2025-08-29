@@ -11,8 +11,9 @@ export interface User {
   add_date: string;
   last_accessed: string;
   role: 'user' | 'admin';
+  company_role?: string; // User's company role (e.g., Data Scientist, Product Manager)
   email?: string;
-  name?: string;
+  full_name?: string; // Changed from 'name' to match API response
 }
 
 export interface UserCreateRequest {
@@ -20,12 +21,14 @@ export interface UserCreateRequest {
   email?: string;
   full_name?: string;
   role?: 'user' | 'admin';
+  company_role?: string;
 }
 
 export interface UserUpdateRequest {
   email?: string;
   full_name?: string;
   role?: 'user' | 'admin';
+  company_role?: string;
 }
 
 // Decision Tree Types
@@ -195,4 +198,45 @@ export interface TourSessionUpdateRequest {
 
 export interface TourSessionListResponse {
   sessions: TourSession[];
+}
+
+// Feedback Types
+export type FeedbackCategory = 'bug' | 'feature_request' | 'tour_suggestion' | 'other';
+export type FeedbackStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export interface Feedback {
+  id: string;
+  username: string;
+  date_submitted: string;
+  category: FeedbackCategory;
+  user_role: 'user' | 'admin';
+  role?: string;  // Optional role field
+  comment: string;
+  status: FeedbackStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedbackCreateRequest {
+  category: FeedbackCategory;
+  role?: string;  // Optional role field
+  comment: string;
+}
+
+export interface FeedbackUpdateRequest {
+  status?: FeedbackStatus;
+  role?: string;
+  comment?: string;
+}
+
+export interface FeedbackListResponse {
+  feedback: Feedback[];
+  total: number;
+}
+
+export interface FeedbackStatsResponse {
+  total: number;
+  by_category: Record<FeedbackCategory, number>;
+  by_status: Record<FeedbackStatus, number>;
+  by_role: Record<'user' | 'admin', number>;
 }

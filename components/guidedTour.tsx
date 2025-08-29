@@ -284,7 +284,7 @@ export function GuidedTour() {
     return errors.length === 0;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     console.log('🔘 Next button clicked');
     console.log('📋 Current form answers:', formAnswers);
     console.log('🎯 Current step index:', currentStepIndex);
@@ -310,7 +310,7 @@ export function GuidedTour() {
             nextStepId: currentStep?.nextStepId
           });
           
-          const nextStepId = navigateToNextStep();
+          const nextStepId = await navigateToNextStep();
           
           if (nextStepId) {
             console.log('✅ Navigated to step:', nextStepId);
@@ -831,9 +831,26 @@ export function GuidedTour() {
           </Button>
           
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" onClick={handleClose}>
-              Cancel
-            </Button>
+            {/* Show Save button only when user has progressed past root step */}
+            {(() => {
+              const hasProgressedPastRoot = currentStepPath.length > 1 || (currentStepPath.length === 1 && currentStepPath[0] !== rootStepId);
+              return hasProgressedPastRoot && currentSessionId && !isTestMode ? (
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    await exitAndSave();
+                  }}
+                  className="flex items-center"
+                >
+                  <Check className="h-4 w-4 mr-1" />
+                  Save & Exit
+                </Button>
+              ) : (
+                <Button variant="ghost" onClick={handleClose}>
+                  Cancel
+                </Button>
+              );
+            })()}
             <Button onClick={handleNext} className="flex items-center">
               {isLastStep ? 'Complete' : 'Next'}
               {!isLastStep && <ChevronRight className="h-4 w-4 ml-1" />}

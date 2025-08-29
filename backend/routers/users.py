@@ -17,6 +17,7 @@ class UserResponse(BaseModel):
     add_date: str
     last_accessed: str
     role: str
+    company_role: Optional[str] = None
     email: Optional[str] = None
     full_name: Optional[str] = None
 
@@ -30,6 +31,7 @@ class UserUpdateRequest(BaseModel):
     email: Optional[str] = None
     full_name: Optional[str] = None
     role: Optional[str] = None
+    company_role: Optional[str] = None
 
 def extract_user_info(request: Request) -> dict:
     """Extract user information from request headers (External authentication)"""
@@ -61,7 +63,7 @@ async def get_or_create_user(request: Request) -> UserResponse:
         with conn.cursor() as cur:
             # Try to get existing user
             cur.execute("""
-                SELECT username, add_date, last_accessed, role, email, full_name
+                SELECT username, add_date, last_accessed, role, company_role, email, full_name
                 FROM users WHERE username = %s
             """, (username,))
             
@@ -81,16 +83,17 @@ async def get_or_create_user(request: Request) -> UserResponse:
                     add_date=user[1].isoformat() + 'Z',
                     last_accessed=datetime.now().isoformat() + 'Z',
                     role=user[3],
-                    email=user[4],
-                    full_name=user[5]
+                    company_role=user[4],
+                    email=user[5],
+                    full_name=user[6]
                 )
             else:
                 # Create new user with default role 'user'
                 cur.execute("""
-                    INSERT INTO users (username, email, full_name, role)
+                    INSERT INTO users (username, email, full_name, role, company_role)
                     VALUES (%s, %s, %s, %s)
-                    RETURNING username, add_date, last_accessed, role, email, full_name
-                """, (username, user_info["email"], user_info["full_name"], "user"))
+                    RETURNING username, add_date, last_accessed, role, company_role, email, full_name
+                """, (username, user_info["email"], user_info["full_name"], "user", None))
                 
                 new_user = cur.fetchone()
                 conn.commit()
@@ -102,8 +105,9 @@ async def get_or_create_user(request: Request) -> UserResponse:
                     add_date=new_user[1].isoformat() + 'Z',
                     last_accessed=new_user[2].isoformat() + 'Z',
                     role=new_user[3],
-                    email=new_user[4],
-                    full_name=new_user[5]
+                    company_role=new_user[4],
+                    email=new_user[5],
+                    full_name=new_user[6]
                 )
                 
     except Exception as e:
@@ -135,7 +139,7 @@ async def get_current_user(request: Request):
         with conn.cursor() as cur:
             # Try to get existing user
             cur.execute("""
-                SELECT username, add_date, last_accessed, role, email, full_name
+                SELECT username, add_date, last_accessed, role, company_role, email, full_name
                 FROM users WHERE username = %s
             """, (username,))
             
@@ -155,16 +159,17 @@ async def get_current_user(request: Request):
                     add_date=user[1].isoformat() + 'Z',
                     last_accessed=datetime.now().isoformat() + 'Z',
                     role=user[3],
-                    email=user[4],
-                    full_name=user[5]
+                    company_role=user[4],
+                    email=user[5],
+                    full_name=user[6]
                 )
             else:
                 # Create new user with default role 'user'
                 cur.execute("""
-                    INSERT INTO users (username, email, full_name, role)
+                    INSERT INTO users (username, email, full_name, role, company_role)
                     VALUES (%s, %s, %s, %s)
-                    RETURNING username, add_date, last_accessed, role, email, full_name
-                """, (username, user_info["email"], user_info["full_name"], "user"))
+                    RETURNING username, add_date, last_accessed, role, company_role, email, full_name
+                """, (username, user_info["email"], user_info["full_name"], "user", None))
                 
                 new_user = cur.fetchone()
                 conn.commit()
@@ -176,8 +181,9 @@ async def get_current_user(request: Request):
                     add_date=new_user[1].isoformat() + 'Z',
                     last_accessed=new_user[2].isoformat() + 'Z',
                     role=new_user[3],
-                    email=new_user[4],
-                    full_name=new_user[5]
+                    company_role=new_user[4],
+                    email=new_user[5],
+                    full_name=new_user[6]
                 )
                 
     except Exception as e:
@@ -199,7 +205,7 @@ async def get_all_users(request: Request):
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT username, add_date, last_accessed, role, email, full_name
+                SELECT username, add_date, last_accessed, role, company_role, email, full_name
                 FROM users 
                 ORDER BY add_date DESC
             """)
@@ -211,8 +217,9 @@ async def get_all_users(request: Request):
                     add_date=row[1].isoformat() + 'Z',
                     last_accessed=row[2].isoformat() + 'Z',
                     role=row[3],
-                    email=row[4],
-                    full_name=row[5]
+                    company_role=row[4],
+                    email=row[5],
+                    full_name=row[6]
                 ))
             
             return users
@@ -273,7 +280,7 @@ async def update_user(
                 UPDATE users 
                 SET {', '.join(update_fields)}
                 WHERE username = %s
-                RETURNING username, add_date, last_accessed, role, email, full_name
+                RETURNING username, add_date, last_accessed, role, company_role, email, full_name
             """, update_values)
             
             updated_user = cur.fetchone()
@@ -284,8 +291,9 @@ async def update_user(
                 add_date=updated_user[1].isoformat() + 'Z',
                 last_accessed=updated_user[2].isoformat() + 'Z',
                 role=updated_user[3],
-                email=updated_user[4],
-                full_name=updated_user[5]
+                company_role=updated_user[4],
+                email=updated_user[5],
+                full_name=updated_user[6]
             )
             
     except Exception as e:

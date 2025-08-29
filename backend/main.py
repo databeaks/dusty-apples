@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 # Import our modules
 from backend.database import init_database
-from backend.routers import basic, decision_tree, decision_trees, tour_sessions, users
+from backend.routers import basic, decision_tree, decision_trees, tour_sessions, users, feedback
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -44,6 +44,7 @@ app.include_router(decision_tree.router)
 app.include_router(decision_trees.router)
 app.include_router(tour_sessions.router)
 app.include_router(users.router)
+app.include_router(feedback.router)
 
 # Initialize database on startup
 @app.on_event("startup")
@@ -54,7 +55,6 @@ async def startup_event():
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build")
 os.makedirs(static_dir, exist_ok=True)
 
-# --- Catch-all for React Routes (exclude API paths) ---
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="build")
 
 # --- Catch-all for React Routes ---

@@ -64,7 +64,7 @@ export default function SettingsPage() {
       const filtered = users.filter(user => 
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredUsers(filtered);
     }
@@ -130,7 +130,7 @@ export default function SettingsPage() {
   // Show loading state while checking authentication
   if (isLoadingUser) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="flex-1 bg-gray-50 p-6 w-full">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="flex items-center space-x-2 text-gray-500">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
@@ -147,7 +147,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="flex-1 bg-gray-50 p-6 w-full space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -237,7 +237,7 @@ export default function SettingsPage() {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">
-                              {user.name || user.username}
+                              {user.full_name || user.username}
                               {user.username === currentUser?.username && (
                                 <span className="ml-2 text-xs text-red-600">(You)</span>
                               )}

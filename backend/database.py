@@ -352,6 +352,7 @@ def init_database():
                     add_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     role VARCHAR(50) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+                    company_role VARCHAR(255), -- User's company role (e.g., Data Scientist, Product Manager)
                     email VARCHAR(255),
                     full_name VARCHAR(255),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -359,10 +360,24 @@ def init_database():
                 )
             """)
             
+            # Migration: Add company_role column if it doesn't exist
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' 
+                AND column_name = 'company_role'
+            """)
+            company_role_exists = cur.fetchone()
+            
+            if not company_role_exists:
+                cur.execute("ALTER TABLE users ADD COLUMN company_role VARCHAR(255)")
+                logger.info("Added company_role column to users table")
+            
             # Create indexes for efficient user queries
             cur.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users (role)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_users_last_accessed ON users (last_accessed DESC)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_users_company_role ON users (company_role)")
             
             # Create trigger to auto-update users updated_at timestamp
             cur.execute("""
@@ -427,6 +442,75 @@ def init_database():
                     EXECUTE FUNCTION update_tour_sessions_updated_at();
             """)
             
+            # Create feedback table for user feedback collection
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    username VARCHAR(255) NOT NULL,
+                    date_submitted TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    category VARCHAR(50) NOT NULL CHECK (category IN ('bug', 'feature_request', 'tour_suggestion', 'other')),
+                    user_role VARCHAR(50) NOT NULL CHECK (user_role IN ('user', 'admin')),
+                    role VARCHAR(255),
+                    comment TEXT NOT NULL,
+                    status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Create indexes for efficient feedback queries
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_feedback_username ON feedback (username)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_feedback_category ON feedback (category)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback (status)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_feedback_date_submitted ON feedback (date_submitted DESC)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_feedback_user_role ON feedback (user_role)")
+            
+            # Migration logic for existing feedback table - add role column if it doesn't exist
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'feedback' 
+                AND column_name = 'role'
+            """)
+            role_exists = cur.fetchone()
+            
+            if not role_exists:
+                # Add the optional role column for existing installations
+                cur.execute("ALTER TABLE feedback ADD COLUMN role VARCHAR(255)")
+            
+            # Check if we need to rename the old role column to user_role
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'feedback' 
+                AND column_name = 'user_role'
+            """)
+            user_role_exists = cur.fetchone()
+            
+            # Migration: rename role to user_role if user_role doesn't exist
+            if not user_role_exists and role_exists:
+                cur.execute("ALTER TABLE feedback RENAME COLUMN role TO user_role")
+                cur.execute("ALTER TABLE feedback ADD COLUMN role VARCHAR(255)")
+            
+            # Create trigger to auto-update feedback updated_at timestamp
+            cur.execute("""
+                CREATE OR REPLACE FUNCTION update_feedback_updated_at()
+                RETURNS TRIGGER AS $$
+                BEGIN
+                    NEW.updated_at = CURRENT_TIMESTAMP;
+                    RETURN NEW;
+                END;
+                $$ language 'plpgsql';
+            """)
+            
+            cur.execute("""
+                DROP TRIGGER IF EXISTS update_feedback_updated_at ON feedback;
+                CREATE TRIGGER update_feedback_updated_at
+                    BEFORE UPDATE ON feedback
+                    FOR EACH ROW
+                    EXECUTE FUNCTION update_feedback_updated_at();
+            """)
+
             # Create default admin users
             admin_users = [
                 {

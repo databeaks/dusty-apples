@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export function Home() {
-  const { openGuidedTour } = useAppStore();
+  const { openGuidedTour, isLoadingDatabaseTour } = useAppStore();
 
   return (
     <div className="flex-1 bg-gradient-to-br from-gray-50 to-white">
@@ -55,11 +55,21 @@ export function Home() {
                     console.error('Failed to start discovery tour:', error);
                   }
                 }}
+                disabled={isLoadingDatabaseTour}
                 size="lg"
-                className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-lg px-8 py-3"
+                className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-lg px-8 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Play className="h-5 w-5 mr-2" />
-                Start Discovery
+                {isLoadingDatabaseTour ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Loading Tour...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-5 w-5 mr-2" />
+                    Start Discovery
+                  </>
+                )}
               </Button>
             </div>
 
