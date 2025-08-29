@@ -2,15 +2,23 @@ import logging
 import json
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from backend.database import get_db_connection
+from backend.routers.users import get_or_create_user
 from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/decision-trees", tags=["decision-trees"])
 
+async def require_admin(request: Request):
+    """Middleware to require admin role for decision tree operations"""
+    user = await get_or_create_user(request)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required for decision tree management")
+    return user
+
 @router.get("/")
-async def list_decision_trees():
+async def list_decision_trees(request: Request, admin_user = Depends(require_admin)):
     """Get all decision trees with metadata"""
     conn = get_db_connection()
     try:
@@ -60,7 +68,7 @@ async def list_decision_trees():
         conn.close()
 
 @router.post("/")
-async def create_decision_tree(request: Request):
+async def create_decision_tree(request: Request, admin_user = Depends(require_admin)):
     """Create a new decision tree"""
     try:
         body = await request.json()
@@ -96,7 +104,7 @@ async def create_decision_tree(request: Request):
 
 # Specific routes MUST come before parameterized routes
 @router.get("/test")
-async def test_route():
+async def test_route(request: Request, admin_user = Depends(require_admin)):
     """Test route to verify this router is working"""
     try:
         logger.info("Test route called successfully")
@@ -106,7 +114,7 @@ async def test_route():
         raise
 
 @router.get("/default-for-tour")
-async def get_default_tour_tree():
+async def get_default_tour_tree(request: Request, admin_user = Depends(require_admin)):
     """Get the decision tree that is currently set as default for guided tours"""
     try:
         logger.info("Getting default tour tree...")
@@ -149,7 +157,7 @@ async def get_default_tour_tree():
             conn.close()
 
 @router.get("/{tree_id}")
-async def get_decision_tree(tree_id: str):
+async def get_decision_tree(tree_id: str, request: Request, admin_user = Depends(require_admin)):
     """Get a specific decision tree with nodes and edges"""
     conn = get_db_connection()
     try:
@@ -223,7 +231,7 @@ async def get_decision_tree(tree_id: str):
         conn.close()
 
 @router.put("/{tree_id}")
-async def update_decision_tree(tree_id: str, request: Request):
+async def update_decision_tree(tree_id: str, request: Request, admin_user = Depends(require_admin)):
     """Update decision tree metadata"""
     try:
         body = await request.json()
@@ -281,7 +289,7 @@ async def update_decision_tree(tree_id: str, request: Request):
         conn.close()
 
 @router.delete("/{tree_id}")
-async def delete_decision_tree(tree_id: str):
+async def delete_decision_tree(tree_id: str, request: Request, admin_user = Depends(require_admin)):
     """Delete a decision tree and all its nodes/edges"""
     conn = get_db_connection()
     try:
@@ -302,7 +310,7 @@ async def delete_decision_tree(tree_id: str):
         conn.close()
 
 @router.post("/{tree_id}/duplicate")
-async def duplicate_decision_tree(tree_id: str, request: Request):
+async def duplicate_decision_tree(tree_id: str, request: Request, admin_user = Depends(require_admin)):
     """Duplicate a decision tree with all its nodes and edges"""
     try:
         body = await request.json()
@@ -399,7 +407,7 @@ async def duplicate_decision_tree(tree_id: str, request: Request):
         conn.close()
 
 @router.get("/{tree_id}/export")
-async def export_decision_tree(tree_id: str):
+async def export_decision_tree(tree_id: str, request: Request, admin_user = Depends(require_admin)):
     """Export decision tree as JSON"""
     conn = get_db_connection()
     try:
@@ -446,7 +454,7 @@ async def export_decision_tree(tree_id: str):
         conn.close()
 
 @router.post("/{tree_id}/set-default-for-tour")
-async def set_default_tour_tree(tree_id: str):
+async def set_default_tour_tree(tree_id: str, request: Request, admin_user = Depends(require_admin)):
     """Set a decision tree as the default for guided tours"""
     conn = get_db_connection()
     try:

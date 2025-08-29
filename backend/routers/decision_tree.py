@@ -1,14 +1,22 @@
 import logging
 import json
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from backend.database import get_db_connection, validate_root_node_constraints
+from backend.routers.users import get_or_create_user
 from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/decision-tree", tags=["decision-tree"])
 
+async def require_admin(request: Request):
+    """Middleware to require admin role for decision tree operations"""
+    user = await get_or_create_user(request)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required for decision tree management")
+    return user
+
 @router.get("/")
-async def get_decision_tree():
+async def get_decision_tree(request: Request, admin_user = Depends(require_admin)):
     """Get the complete decision tree (nodes and edges) - Uses default tour tree for backward compatibility"""
     conn = get_db_connection()
     try:
@@ -76,12 +84,12 @@ async def get_decision_tree():
         conn.close()
 
 @router.get("")
-async def get_decision_tree_no_slash():
+async def get_decision_tree_no_slash(request: Request, admin_user = Depends(require_admin)):
     """Get the complete decision tree (nodes and edges) - handles requests without trailing slash"""
-    return await get_decision_tree()
+    return await get_decision_tree(request, admin_user)
 
 @router.post("/nodes")
-async def create_node(request: Request, tree_id: str = None):
+async def create_node(request: Request, tree_id: str = None, admin_user = Depends(require_admin)):
     """Create a new decision tree node"""
     try:
         body = await request.json()
@@ -141,7 +149,7 @@ async def create_node(request: Request, tree_id: str = None):
         conn.close()
 
 @router.put("/nodes/{node_id}")
-async def update_node(node_id: str, request: Request):
+async def update_node(node_id: str, request: Request, admin_user = Depends(require_admin)):
     """Update an existing decision tree node"""
     try:
         body = await request.json()
@@ -186,7 +194,7 @@ async def update_node(node_id: str, request: Request):
         conn.close()
 
 @router.delete("/nodes/{node_id}")
-async def delete_node(node_id: str):
+async def delete_node(node_id: str, request: Request, admin_user = Depends(require_admin)):
     """Delete a decision tree node (edges will be deleted automatically due to CASCADE)"""
     conn = get_db_connection()
     try:
@@ -205,7 +213,7 @@ async def delete_node(node_id: str):
         conn.close()
 
 @router.post("/edges")
-async def create_edge(request: Request):
+async def create_edge(request: Request, admin_user = Depends(require_admin)):
     """Create a new decision tree edge"""
     try:
         body = await request.json()
@@ -248,7 +256,7 @@ async def create_edge(request: Request):
         conn.close()
 
 @router.delete("/edges/{edge_id}")
-async def delete_edge(edge_id: str):
+async def delete_edge(edge_id: str, request: Request, admin_user = Depends(require_admin)):
     """Delete a decision tree edge"""
     conn = get_db_connection()
     try:
@@ -267,7 +275,7 @@ async def delete_edge(edge_id: str):
         conn.close()
 
 @router.post("/nodes/{node_id}/set-root")
-async def set_root_node(node_id: str):
+async def set_root_node(node_id: str, request: Request, admin_user = Depends(require_admin)):
     """Set a node as the root node (removes root from other nodes in the same tree)"""
     conn = get_db_connection()
     try:
@@ -315,7 +323,7 @@ async def set_root_node(node_id: str):
         conn.close()
 
 @router.get("/root")
-async def get_root_node():
+async def get_root_node(request: Request, admin_user = Depends(require_admin)):
     """Get the current root node"""
     conn = get_db_connection()
     try:
@@ -345,7 +353,7 @@ async def get_root_node():
         conn.close()
 
 @router.get("/validate-connectivity")
-async def validate_tree_connectivity(tree_id: str = None):
+async def validate_tree_connectivity(tree_id: str = None, request: Request = None, admin_user = Depends(require_admin)):
     """Validate that all nodes are reachable from root"""
     conn = get_db_connection()
     try:
