@@ -53,16 +53,16 @@ class FeedbackStatsResponse(BaseModel):
 def format_feedback_response(row) -> FeedbackResponse:
     """Convert database row to FeedbackResponse"""
     return FeedbackResponse(
-        id=str(row[0]),
-        username=row[1],
-        date_submitted=row[2].isoformat() + 'Z',
-        category=row[3],
-        user_role=row[4],
-        role=row[5],  # Optional role
-        comment=row[6],
-        status=row[7],
-        created_at=row[8].isoformat() + 'Z',
-        updated_at=row[9].isoformat() + 'Z'
+        id=str(row['id']),
+        username=row['username'],
+        date_submitted=row['date_submitted'].isoformat() + 'Z',
+        category=row['category'],
+        user_role=row['user_role'],
+        role=row['role'],  # Optional role
+        comment=row['comment'],
+        status=row['status'],
+        created_at=row['created_at'].isoformat() + 'Z',
+        updated_at=row['updated_at'].isoformat() + 'Z'
     )
 
 @router.post("/", response_model=FeedbackResponse)
@@ -96,8 +96,8 @@ async def submit_feedback(
                 cur.execute("""
                     UPDATE users 
                     SET company_role = %s, updated_at = CURRENT_TIMESTAMP
-                    WHERE username = %s
-                """, (feedback_request.role, current_user.username))
+                    WHERE email = %s
+                """, (feedback_request.role, current_user.email))
                 logger.info(f"Updated company role for {current_user.username}: {feedback_request.role}")
             
             conn.commit()
@@ -194,32 +194,32 @@ async def get_feedback_stats(request: Request):
     try:
         with conn.cursor() as cur:
             # Get total count
-            cur.execute("SELECT COUNT(*) FROM feedback")
-            total = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) as total FROM feedback")
+            total = cur.fetchone()['total']
             
             # Get stats by category
             cur.execute("""
-                SELECT category, COUNT(*) 
+                SELECT category, COUNT(*) as count
                 FROM feedback 
                 GROUP BY category
             """)
-            by_category = {row[0]: row[1] for row in cur.fetchall()}
+            by_category = {row['category']: row['count'] for row in cur.fetchall()}
             
             # Get stats by status
             cur.execute("""
-                SELECT status, COUNT(*) 
+                SELECT status, COUNT(*) as count
                 FROM feedback 
                 GROUP BY status
             """)
-            by_status = {row[0]: row[1] for row in cur.fetchall()}
+            by_status = {row['status']: row['count'] for row in cur.fetchall()}
             
             # Get stats by user_role
             cur.execute("""
-                SELECT user_role, COUNT(*) 
+                SELECT user_role, COUNT(*) as count
                 FROM feedback 
                 GROUP BY user_role
             """)
-            by_role = {row[0]: row[1] for row in cur.fetchall()}
+            by_role = {row['user_role']: row['count'] for row in cur.fetchall()}
             
             return FeedbackStatsResponse(
                 total=total,
@@ -296,7 +296,7 @@ async def update_feedback(
             if not existing_feedback:
                 raise HTTPException(status_code=404, detail="Feedback not found")
             
-            feedback_owner = existing_feedback[1]
+            feedback_owner = existing_feedback['username']
             
             # Build dynamic update query
             update_fields = []

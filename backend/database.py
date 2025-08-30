@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from dotenv import load_dotenv
 import uuid
 from urllib.parse import urlparse, urlunparse
+from contextlib import contextmanager
+from typing import Optional
 
 # Load environment variables
 # Load .env first (base configuration), then .env.local (local overrides)
@@ -29,6 +31,18 @@ else:
 # Environment detection
 ENVIRONMENT = os.getenv("ENVIRONMENT", "local").lower()
 logger.info(f"Environment mode: {ENVIRONMENT}")
+
+# Use credential manager with single shared credential for production
+if ENVIRONMENT == "production":
+    try:
+        from backend.credential_manager import get_shared_credential_manager, get_shared_connection_pool
+        _use_credential_manager = True
+        logger.info("Using shared credential management with connection pooling for production")
+    except ImportError as e:
+        logger.warning(f"Failed to import credential manager: {e}. Falling back to direct credentials")
+        _use_credential_manager = False
+else:
+    _use_credential_manager = False
 
 def get_databricks_database_url():
     """Generate database URL using Databricks SDK for production deployments"""
@@ -102,36 +116,106 @@ def get_database_url():
 # Cache database URL for local development (but regenerate for production each time)
 _cached_database_url = None
 
+@contextmanager
+def get_db_connection_for_user(user_id: str):
+    """Get a database connection for a specific user using shared credential management"""
+    if ENVIRONMENT == "production" and _use_credential_manager:
+        # Use shared connection pooling with managed credentials
+        logger.info(f"Getting pooled connection for user: {user_id} (using credential manager)")
+        pool_manager = get_shared_connection_pool()
+        with pool_manager.get_connection(user_id) as conn:
+            yield conn
+    else:
+        # Fallback to direct connection for local development
+        logger.info(f"Getting direct connection for user: {user_id} (ENVIRONMENT={ENVIRONMENT}, _use_credential_manager={_use_credential_manager})")
+        conn = get_db_connection()
+        try:
+            yield conn
+        finally:
+            conn.close()
+
 def get_db_connection():
-    """Get a database connection"""
+    """Get a database connection (legacy method - prefer get_db_connection_for_user)"""
     global _cached_database_url
+    
+    logger.info(f"=== Attempting database connection in {ENVIRONMENT} environment ===")
     
     try:
         # For production, always generate fresh credentials to handle potential credential rotation
         # For local development, cache the URL to avoid unnecessary overhead
         if ENVIRONMENT == "production":
+            logger.info("Production environment: generating fresh database credentials")
             database_url = get_database_url()
+            logger.info("Successfully generated database URL for production")
         else:
+            logger.info("Local/dev environment: using cached or generating database URL")
             if _cached_database_url is None:
+                logger.info("No cached database URL, generating new one...")
                 _cached_database_url = get_database_url()
+                logger.info("Successfully generated and cached database URL")
+            else:
+                logger.info("Using cached database URL")
             database_url = _cached_database_url
         
-        logger.debug(f"Connecting to database in {ENVIRONMENT} environment")
+        logger.info(f"Attempting psycopg2.connect() in {ENVIRONMENT} environment...")
+        # Extract host from URL for logging (without credentials)
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(database_url)
+            safe_connection_info = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}/{parsed.path.lstrip('/')}"
+            logger.info(f"Connecting to: {safe_connection_info}")
+        except Exception as parse_error:
+            logger.warning(f"Could not parse database URL for logging: {parse_error}")
+        
         conn = psycopg2.connect(database_url)
+        conn.cursor_factory = RealDictCursor
+        logger.info("Database connection established successfully")
         return conn
-    except Exception as e:
-        logger.error(f"Database connection failed in {ENVIRONMENT} environment: {e}")
+        
+    except psycopg2.OperationalError as op_error:
+        logger.error(f"PostgreSQL operational error in {ENVIRONMENT} environment: {op_error}")
+        logger.error(f"This is typically a connection, authentication, or server issue")
+        
         # In production, try to clear any cached credentials and retry once
         if ENVIRONMENT == "production":
-            logger.info("Retrying database connection with fresh credentials...")
+            logger.info("Production environment: attempting retry with fresh credentials...")
             try:
                 database_url = get_database_url()
+                logger.info("Successfully generated fresh credentials, attempting connection...")
                 conn = psycopg2.connect(database_url)
+                conn.cursor_factory = RealDictCursor
+                logger.info("Retry connection successful")
                 return conn
             except Exception as retry_error:
                 logger.error(f"Database retry connection also failed: {retry_error}")
+                logger.error(f"Retry error type: {type(retry_error).__name__}")
         
-        raise HTTPException(status_code=500, detail="Database connection failed")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(op_error)}")
+        
+    except psycopg2.DatabaseError as db_error:
+        logger.error(f"PostgreSQL database error in {ENVIRONMENT} environment: {db_error}")
+        logger.error(f"This is typically a database configuration or access issue")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+        
+    except Exception as e:
+        logger.error(f"Unexpected database connection error in {ENVIRONMENT} environment: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error args: {e.args}")
+        
+        # In production, try to clear any cached credentials and retry once
+        if ENVIRONMENT == "production":
+            logger.info("Production environment: attempting retry with fresh credentials...")
+            try:
+                database_url = get_database_url()
+                conn = psycopg2.connect(database_url)
+                conn.cursor_factory = RealDictCursor
+                logger.info("Retry connection successful")
+                return conn
+            except Exception as retry_error:
+                logger.error(f"Database retry connection also failed: {retry_error}")
+                logger.error(f"Retry error type: {type(retry_error).__name__}")
+        
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
 
 def test_db_connection():
     """Test database connection and return database version info"""
@@ -524,13 +608,25 @@ def init_database():
                     "email": "david.wells@databricks.com",
                     "full_name": "David Wells", 
                     "role": "admin"
+                },
+                {
+                    "username": "rhetta.nadas",
+                    "email": "rhetta.nadas@databricks.com",
+                    "full_name": "Rhetta Nadas", 
+                    "role": "admin"
+                },
+                {
+                    "username": "test",
+                    "email": "test@example.com",
+                    "full_name": "Test Admin", 
+                    "role": "admin"
                 }
             ]
             
             for user_data in admin_users:
                 try:
-                    # Check if user already exists
-                    cur.execute("SELECT username FROM users WHERE username = %s", (user_data["username"],))
+                    # Check if user already exists by email
+                    cur.execute("SELECT username FROM users WHERE email = %s", (user_data["email"],))
                     existing_user = cur.fetchone()
                     
                     if not existing_user:
@@ -544,9 +640,9 @@ def init_database():
                         # User exists, ensure they have admin role
                         cur.execute("""
                             UPDATE users 
-                            SET role = 'admin', email = %s, full_name = %s, last_accessed = CURRENT_TIMESTAMP
-                            WHERE username = %s AND role != 'admin'
-                        """, (user_data["email"], user_data["full_name"], user_data["username"]))
+                            SET role = 'admin', username = %s, full_name = %s, last_accessed = CURRENT_TIMESTAMP
+                            WHERE email = %s AND role != 'admin'
+                        """, (user_data["username"], user_data["full_name"], user_data["email"]))
                         if cur.rowcount > 0:
                             logger.info(f"Promoted existing user to admin: {user_data['username']} ({user_data['email']})")
                         else:
@@ -584,4 +680,56 @@ def validate_root_node_constraints(node_data: dict, tree_id: str = None):
                         detail=f"Only one root node allowed per decision tree. Current root: {existing_root[0]}"
                     )
         finally:
-            conn.close() 
+            conn.close()
+
+# Credential management utility functions
+def get_credential_stats() -> dict:
+    """Get statistics about credential and connection pool usage"""
+    if ENVIRONMENT == "production" and _use_credential_manager:
+        try:
+            credential_manager = get_shared_credential_manager()
+            connection_pool = get_shared_connection_pool()
+            
+            return {
+                "environment": ENVIRONMENT,
+                "using_credential_manager": True,
+                "connection_method": "shared_credential_with_pooling",
+                "credential_stats": credential_manager.get_stats(),
+                "connection_pool_stats": connection_pool.get_stats()
+            }
+        except Exception as e:
+            logger.error(f"Error getting credential stats: {e}")
+            return {
+                "environment": ENVIRONMENT,
+                "using_credential_manager": False,
+                "error": str(e)
+            }
+    else:
+        return {
+            "environment": ENVIRONMENT,
+            "using_credential_manager": False,
+            "connection_method": "direct_connection"
+        }
+
+def invalidate_user_credentials(user_id: str) -> bool:
+    """Invalidate cached credentials"""
+    if ENVIRONMENT == "production" and _use_credential_manager:
+        try:
+            credential_manager = get_shared_credential_manager()
+            return credential_manager.invalidate_credentials(user_id)
+        except Exception as e:
+            logger.error(f"Error invalidating credentials: {e}")
+            return False
+    return False
+
+def shutdown_database_connections():
+    """Shutdown all database connections and pools (call on app shutdown)"""
+    if ENVIRONMENT == "production" and _use_credential_manager:
+        try:
+            from backend.credential_manager import shutdown_pools
+            shutdown_pools()
+            logger.info("Database connection pools shut down successfully")
+        except Exception as e:
+            logger.error(f"Error during database shutdown: {e}")
+    else:
+        logger.info("No connection pools to shut down") 

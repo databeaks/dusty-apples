@@ -21,16 +21,17 @@ def ensure_user_exists(request: Request) -> str:
     
     user_info = extract_user_info(request)
     username = user_info["username"]
+    email = user_info["email"]
     
-    if not username or username == "anonymous":
-        logger.warning("Anonymous user attempting to access tour sessions")
-        return username  # Still allow anonymous users for demo purposes
+    if not email:
+        logger.warning("Empty email attempting to access tour sessions")
+        return username  # Still allow for demo purposes
     
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # Try to get existing user
-            cur.execute("SELECT username FROM users WHERE username = %s", (username,))
+            # Try to get existing user by email
+            cur.execute("SELECT username FROM users WHERE email = %s", (email,))
             user = cur.fetchone()
             
             if not user:
@@ -47,8 +48,8 @@ def ensure_user_exists(request: Request) -> str:
                 cur.execute("""
                     UPDATE users 
                     SET last_accessed = CURRENT_TIMESTAMP 
-                    WHERE username = %s
-                """, (username,))
+                    WHERE email = %s
+                """, (email,))
                 conn.commit()
             
             return username

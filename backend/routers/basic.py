@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Request
-from backend.database import test_db_connection
+from backend.database import test_db_connection, get_credential_stats
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["basic"])
@@ -36,7 +36,12 @@ async def get_user(request: Request):
 async def database_test():
     """Test database connection and return connection info"""
     logger.info("Database test requested at /api/db-test")
-    return test_db_connection()
+    db_status = test_db_connection()
+    credential_stats = get_credential_stats()
+    return {
+        "database": db_status,
+        "credential_management": credential_stats
+    }
 
 @router.get("/api/env-info")
 async def environment_info():
